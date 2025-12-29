@@ -1,121 +1,71 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>UDM GPS 出勤</title>
-  <style>
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
-      background: #f2f4f8;
-      padding: 20px;
-    }
-    .card {
-      max-width: 420px;
-      margin: auto;
-      background: #fff;
-      border-radius: 12px;
-      padding: 20px;
-      box-shadow: 0 10px 25px rgba(0,0,0,.08);
-    }
-    h2 { text-align: center; }
-    input, button {
-      width: 100%;
-      padding: 12px;
-      margin-top: 10px;
-      font-size: 16px;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-    }
-    button {
-      border: none;
-      color: #fff;
-      cursor: pointer;
-    }
-    .btn-in { background: #2f6fd6; }
-    .btn-out { background: #555; }
-    .info {
-      margin-top: 15px;
-      font-size: 14px;
-      line-height: 1.6;
-    }
-    .error { color: #d33; }
-    .ok { color: #1a7f37; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UDM GPS 打卡</title>
+<style>
+body{font-family:system-ui;background:#f4f6f8;padding:20px}
+.box{max-width:420px;margin:auto;background:#fff;padding:20px;border-radius:12px}
+input,button{width:100%;padding:12px;margin-top:10px;font-size:16px}
+button{border:none;border-radius:8px;background:#2f6fd6;color:#fff}
+.out{background:#555}
+.info{margin-top:12px;font-size:14px}
+.ok{color:green}
+.err{color:red}
+</style>
 </head>
 <body>
 
-<div class="card">
-  <h2>UDM GPS 出勤</h2>
+<div class="box">
+<h2>UDM GPS 打卡</h2>
 
-  <input id="name" placeholder="請輸入姓名（ID）" />
+<input id="name" placeholder="請輸入姓名">
 
-  <button class="btn-in" onclick="punch('IN')">上班打卡</button>
-  <button class="btn-out" onclick="punch('OUT')">下班打卡</button>
+<button onclick="punch('IN')">上班打卡</button>
+<button class="out" onclick="punch('OUT')">下班打卡</button>
 
-  <div class="info">
-    📍 緯度：<span id="lat">-</span><br>
-    📍 經度：<span id="lon">-</span><br>
-    🎯 精準度：<span id="acc">-</span> m<br>
-    <div id="result" class="error">定位中…</div>
-  </div>
+<div class="info">
+📍 緯度：<span id="lat">-</span><br>
+📍 經度：<span id="lon">-</span><br>
+🎯 精準度：<span id="acc">-</span> m<br>
+<div id="msg">等待定位…</div>
+</div>
 </div>
 
 <script>
-/* ===== 已幫你填好，不要再改 ===== */
 const API_URL =
-  "https://script.google.com/macros/s/AKfycbzFWXo1fsxLv2ghk_8l0vZuS8nex9h_3y-LX69R0fOLO6o8ZO6rMjMAif5UqfgN1I0L/exec";
+"https://script.google.com/macros/s/AKfycbzFWXo1fsxLv2ghk_8l0vZuS8nex9h_3y-LX69R0fOLO6o8ZO6rMjMAif5UqfgN1I0L/exec";
 
-let currentPos = null;
+let gps=null;
 
-/* GPS */
-navigator.geolocation.getCurrentPosition(
-  pos => {
-    currentPos = pos.coords;
-    document.getElementById("lat").innerText = currentPos.latitude;
-    document.getElementById("lon").innerText = currentPos.longitude;
-    document.getElementById("acc").innerText = currentPos.accuracy;
-    document.getElementById("result").innerText = "GPS 就緒";
-    document.getElementById("result").className = "ok";
-  },
-  err => {
-    document.getElementById("result").innerText = "❌ GPS 取得失敗";
-  },
-  { enableHighAccuracy: true }
-);
+navigator.geolocation.getCurrentPosition(p=>{
+  gps=p.coords;
+  lat.innerText=gps.latitude;
+  lon.innerText=gps.longitude;
+  acc.innerText=gps.accuracy;
+  msg.innerText="GPS 就緒";
+  msg.className="ok";
+},{enableHighAccuracy:true});
 
-/* 打卡 */
-function punch(action) {
-  const name = document.getElementById("name").value.trim();
-  if (!name || !currentPos) {
-    alert("姓名或 GPS 尚未完成");
-    return;
-  }
+function punch(action){
+  const name=document.getElementById("name").value.trim();
+  if(!name||!gps){alert("姓名或 GPS 尚未完成");return;}
 
-  const params = new URLSearchParams({
-    type: "attendance",
-    name: name,
-    action: action,
-    lat: currentPos.latitude,
-    lon: currentPos.longitude,
-    accuracy: currentPos.accuracy,
-    distance: 0,
-    device: "github-page"
+  const q=new URLSearchParams({
+    type:"attendance",
+    name:name,
+    action:action,
+    lat:gps.latitude,
+    lon:gps.longitude,
+    accuracy:gps.accuracy,
+    device:"github"
   });
 
-  fetch(API_URL + "?" + params.toString(), { method: "POST" })
-    .then(r => r.json())
-    .then(res => {
-      if (res.status === "ok") {
-        document.getElementById("result").innerText = "✅ 打卡成功";
-        document.getElementById("result").className = "ok";
-      } else {
-        document.getElementById("result").innerText = "❌ " + res.message;
-      }
-    })
-    .catch(() => {
-      document.getElementById("result").innerText = "❌ 連線失敗";
-    });
+  fetch(API_URL+"?"+q.toString())
+    .then(r=>r.json())
+    .then(()=>{msg.innerText="✅ 打卡成功";msg.className="ok";})
+    .catch(()=>{msg.innerText="❌ 失敗";msg.className="err";});
 }
 </script>
 
