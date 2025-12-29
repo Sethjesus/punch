@@ -4,10 +4,27 @@
 <meta charset="UTF-8">
 <title>UDM GPS 出勤</title>
 <style>
-body { font-family: system-ui; background:#f4f6f8; }
-.card { width:360px; margin:60px auto; background:#fff; padding:20px; border-radius:10px; }
-button { width:100%; padding:12px; margin:6px 0; font-size:16px; }
-#status { margin-top:10px; }
+body {
+  font-family: Arial;
+  background: #f4f6f8;
+}
+.card {
+  width: 320px;
+  margin: 50px auto;
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(0,0,0,.1);
+}
+button {
+  width: 100%;
+  padding: 12px;
+  margin-top: 10px;
+}
+.status {
+  margin-top: 10px;
+  font-size: 14px;
+}
 </style>
 </head>
 
@@ -15,58 +32,51 @@ button { width:100%; padding:12px; margin:6px 0; font-size:16px; }
 <div class="card">
   <h2>UDM GPS 出勤</h2>
 
-  <input id="name" placeholder="姓名" style="width:100%;padding:10px">
+  <input id="name" placeholder="姓名" style="width:100%;padding:8px"/>
 
   <button onclick="punch('IN')">上班打卡</button>
   <button onclick="punch('OUT')">下班打卡</button>
 
-  <div id="gps"></div>
-  <div id="status"></div>
+  <div class="status" id="gps">GPS 尚未取得</div>
+  <div class="status" id="status"></div>
 </div>
 
 <script>
 const API_URL =
-'https://script.google.com/macros/s/AKfycbFWX01fsxLv2ghk_8I0vZuS8nex9h_3y-LX69R0fOLo6o8Z0rMJAIiF5UgfqN1L/exec';
-
-const nameInput = document.getElementById('name');
-nameInput.value = localStorage.getItem('udm_name') || '';
-nameInput.oninput = () => localStorage.setItem('udm_name', nameInput.value);
+'https://script.google.com/macros/s/AKfycbzFWXo1fsxLv2ghk_8l0vZuS8nex9h_3y-LX69R0fOLO6o8ZO6rMjMAif5UqfgN1I0L/exec';
 
 function punch(action) {
-  if (!nameInput.value) {
-    alert('請輸入姓名');
-    return;
-  }
+  const name = document.getElementById('name').value;
+  if (!name) return alert('請輸入姓名');
 
   navigator.geolocation.getCurrentPosition(pos => {
-    const c = pos.coords;
+    const d = pos.coords;
 
     document.getElementById('gps').innerHTML =
-      `📍 緯度：${c.latitude}<br>📍 經度：${c.longitude}<br>🎯 精準度：${c.accuracy} m`;
+      `📍 緯度:${d.latitude}<br>📍 經度:${d.longitude}<br>🎯 精準度:${d.accuracy}m`;
 
-    const params = new URLSearchParams({
-      type: 'attendance',
-      name: nameInput.value,
-      action,
-      lat: c.latitude,
-      lon: c.longitude,
-      accuracy: c.accuracy,
-      device: navigator.userAgent
-    });
+    const url = API_URL +
+      `?name=${encodeURIComponent(name)}` +
+      `&action=${action}` +
+      `&lat=${d.latitude}` +
+      `&lon=${d.longitude}` +
+      `&accuracy=${d.accuracy}` +
+      `&device=${encodeURIComponent(navigator.userAgent)}`;
 
-    fetch(API_URL + '?' + params)
+    fetch(url)
       .then(r => r.json())
-      .then(r => {
-        document.getElementById('status').innerHTML =
-          r.ok ? '✅ 送出成功' : '❌ 送出失敗：' + r.msg;
+      .then(() => {
+        document.getElementById('status').innerHTML = '✅ 打卡成功';
       })
-      .catch(err => {
-        document.getElementById('status').innerHTML = '❌ 連線錯誤';
+      .catch(() => {
+        document.getElementById('status').innerHTML = '❌ 連線失敗';
       });
 
-  }, err => alert('GPS 失敗：' + err.message), {
+  }, err => {
+    alert('GPS 失敗: ' + err.message);
+  }, {
     enableHighAccuracy: true,
-    timeout: 10000
+    timeout: 15000
   });
 }
 </script>
