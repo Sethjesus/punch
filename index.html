@@ -6,40 +6,41 @@
   <title>UDM GPS 出勤</title>
   <style>
     body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont;
-      background: #f5f5f5;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
+      background: #f2f4f8;
+      padding: 20px;
     }
     .card {
+      max-width: 420px;
+      margin: auto;
       background: #fff;
-      padding: 20px;
-      width: 320px;
       border-radius: 12px;
-      box-shadow: 0 8px 20px rgba(0,0,0,.1);
+      padding: 20px;
+      box-shadow: 0 10px 25px rgba(0,0,0,.08);
     }
-    h2 { margin-top: 0; }
+    h2 { text-align: center; }
     input, button {
       width: 100%;
-      padding: 10px;
-      margin: 8px 0;
+      padding: 12px;
+      margin-top: 10px;
       font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
     }
     button {
       border: none;
-      border-radius: 8px;
-      background: #1976d2;
       color: #fff;
+      cursor: pointer;
     }
-    button.out { background: #555; }
+    .btn-in { background: #2f6fd6; }
+    .btn-out { background: #555; }
     .info {
+      margin-top: 15px;
       font-size: 14px;
-      margin-top: 10px;
+      line-height: 1.6;
     }
-    .error { color: red; }
-    .ok { color: green; }
+    .error { color: #d33; }
+    .ok { color: #1a7f37; }
   </style>
 </head>
 <body>
@@ -47,47 +48,51 @@
 <div class="card">
   <h2>UDM GPS 出勤</h2>
 
-  <input id="name" placeholder="姓名（如 Jacky）" />
+  <input id="name" placeholder="請輸入姓名（ID）" />
 
-  <button onclick="punch('IN')">上班打卡</button>
-  <button class="out" onclick="punch('OUT')">下班打卡</button>
+  <button class="btn-in" onclick="punch('IN')">上班打卡</button>
+  <button class="btn-out" onclick="punch('OUT')">下班打卡</button>
 
-  <div class="info" id="gps">GPS 尚未取得</div>
-  <div class="info" id="result"></div>
+  <div class="info">
+    📍 緯度：<span id="lat">-</span><br>
+    📍 經度：<span id="lon">-</span><br>
+    🎯 精準度：<span id="acc">-</span> m<br>
+    <div id="result" class="error">定位中…</div>
+  </div>
 </div>
 
 <script>
+/* ===== 已幫你填好，不要再改 ===== */
 const API_URL =
   "https://script.google.com/macros/s/AKfycbzFWXo1fsxLv2ghk_8l0vZuS8nex9h_3y-LX69R0fOLO6o8ZO6rMjMAif5UqfgN1I0L/exec";
 
 let currentPos = null;
 
+/* GPS */
 navigator.geolocation.getCurrentPosition(
   pos => {
     currentPos = pos.coords;
-    document.getElementById("gps").innerHTML =
-      `📍 緯度: ${currentPos.latitude}<br>` +
-      `📍 經度: ${currentPos.longitude}<br>` +
-      `🎯 精準度: ${currentPos.accuracy} m`;
+    document.getElementById("lat").innerText = currentPos.latitude;
+    document.getElementById("lon").innerText = currentPos.longitude;
+    document.getElementById("acc").innerText = currentPos.accuracy;
+    document.getElementById("result").innerText = "GPS 就緒";
+    document.getElementById("result").className = "ok";
   },
   err => {
-    document.getElementById("gps").innerHTML = "❌ 無法取得 GPS";
+    document.getElementById("result").innerText = "❌ GPS 取得失敗";
   },
   { enableHighAccuracy: true }
 );
 
+/* 打卡 */
 function punch(action) {
   const name = document.getElementById("name").value.trim();
-  if (!name) {
-    alert("請輸入姓名");
-    return;
-  }
-  if (!currentPos) {
-    alert("GPS 尚未就緒");
+  if (!name || !currentPos) {
+    alert("姓名或 GPS 尚未完成");
     return;
   }
 
-  const payload = {
+  const params = new URLSearchParams({
     type: "attendance",
     name: name,
     action: action,
@@ -96,25 +101,20 @@ function punch(action) {
     accuracy: currentPos.accuracy,
     distance: 0,
     device: "github-page"
-  };
+  });
 
-  fetch(API_URL, {
-    method: "POST",
-    body: JSON.stringify(payload)
-  })
+  fetch(API_URL + "?" + params.toString(), { method: "POST" })
     .then(r => r.json())
     .then(res => {
       if (res.status === "ok") {
-        document.getElementById("result").innerHTML =
-          `<span class="ok">✅ ${action} 打卡成功</span>`;
+        document.getElementById("result").innerText = "✅ 打卡成功";
+        document.getElementById("result").className = "ok";
       } else {
-        document.getElementById("result").innerHTML =
-          `<span class="error">❌ 失敗</span>`;
+        document.getElementById("result").innerText = "❌ " + res.message;
       }
     })
     .catch(() => {
-      document.getElementById("result").innerHTML =
-        `<span class="error">❌ 連線失敗</span>`;
+      document.getElementById("result").innerText = "❌ 連線失敗";
     });
 }
 </script>
