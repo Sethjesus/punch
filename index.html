@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>UDM GPS 出勤</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont;
+    background: #f4f6f8;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+  }
+  .card {
+    background: #fff;
+    width: 100%;
+    max-width: 360px;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 6px 16px rgba(0,0,0,.1);
+  }
+  h2 { text-align: center; margin-bottom: 16px; }
+  input, button {
+    width: 100%;
+    padding: 10px;
+    margin: 8px 0;
+    font-size: 16px;
+  }
+  button {
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    cursor: pointer;
+  }
+  .in { background: #1e88e5; }
+  .out { background: #455a64; }
+  .status { margin-top: 10px; font-size: 14px; }
+</style>
+</head>
+
+<body>
+<div class="card">
+  <h2>UDM GPS 出勤</h2>
+
+  <input id="name" placeholder="姓名">
+
+  <button class="in" onclick="punch('IN')">上班打卡</button>
+  <button class="out" onclick="punch('OUT')">下班打卡</button>
+
+  <div class="status" id="status"></div>
+</div>
+
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbzFWX01fsxLv2ghk_8l0vZuS8nex9h_3y-LX69R0f0L0o68Z0rMjMAif5UqfgN1L/exec";
+
+const nameInput = document.getElementById("name");
+nameInput.value = localStorage.getItem("udm_name") || "";
+nameInput.onchange = () => localStorage.setItem("udm_name", nameInput.value);
+
+function punch(action) {
+  if (!nameInput.value) {
+    alert("請輸入姓名");
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(pos => {
+    const d = pos.coords;
+
+    const payload = {
+      type: "attendance",
+      name: nameInput.value,
+      action: action,
+      lat: d.latitude,
+      lon: d.longitude,
+      accuracy: d.accuracy,
+      device: navigator.userAgent
+    };
+
+    fetch(API_URL, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(res => {
+      document.getElementById("status").innerText =
+        "✔ 打卡成功\n位置：" + d.latitude + ", " + d.longitude;
+    })
+    .catch(err => {
+      document.getElementById("status").innerText = "❌ 送出失敗";
+    });
+
+  }, err => {
+    alert("GPS 失敗：" + err.message);
+  }, {
+    enableHighAccuracy: true,
+    timeout: 10000
+  });
+}
+</script>
+</body>
+</html>
