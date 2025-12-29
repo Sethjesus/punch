@@ -1,36 +1,45 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>UDM GPS 出勤</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont;
-      background: #f4f6f8;
+      background: #f5f5f5;
       display: flex;
       justify-content: center;
-      padding-top: 40px;
+      align-items: center;
+      min-height: 100vh;
     }
     .card {
       background: #fff;
       padding: 20px;
-      width: 100%;
-      max-width: 380px;
+      width: 320px;
       border-radius: 12px;
-      box-shadow: 0 10px 25px rgba(0,0,0,.1);
+      box-shadow: 0 8px 20px rgba(0,0,0,.1);
     }
-    h2 { text-align: center; }
+    h2 { margin-top: 0; }
     input, button {
       width: 100%;
-      padding: 12px;
-      margin-top: 10px;
+      padding: 10px;
+      margin: 8px 0;
       font-size: 16px;
     }
-    button { cursor: pointer; }
-    .info { margin-top: 12px; font-size: 14px; }
+    button {
+      border: none;
+      border-radius: 8px;
+      background: #1976d2;
+      color: #fff;
+    }
+    button.out { background: #555; }
+    .info {
+      font-size: 14px;
+      margin-top: 10px;
+    }
+    .error { color: red; }
     .ok { color: green; }
-    .err { color: red; }
   </style>
 </head>
 <body>
@@ -38,47 +47,31 @@
 <div class="card">
   <h2>UDM GPS 出勤</h2>
 
-  <input id="name" placeholder="請輸入姓名">
+  <input id="name" placeholder="姓名（如 Jacky）" />
 
   <button onclick="punch('IN')">上班打卡</button>
-  <button onclick="punch('OUT')">下班打卡</button>
+  <button class="out" onclick="punch('OUT')">下班打卡</button>
 
-  <div class="info">
-    📍 緯度：<span id="lat">-</span><br>
-    📍 經度：<span id="lon">-</span><br>
-    🎯 精準度：<span id="acc">-</span> m
-  </div>
-
-  <div id="status" class="info"></div>
+  <div class="info" id="gps">GPS 尚未取得</div>
+  <div class="info" id="result"></div>
 </div>
 
 <script>
-const API_URL = "https://script.google.com/macros/s/AKfycbzFWXo1fsxLv2ghk_8l0vZuS8nex9h_3y-LX69R0fOLO6o8ZO6rMjMAif5UqfgN1I0L/exec";
+const API_URL =
+  "https://script.google.com/macros/s/AKfycbzFWXo1fsxLv2ghk_8l0vZuS8nex9h_3y-LX69R0fOLO6o8ZO6rMjMAif5UqfgN1I0L/exec";
 
-let gps = { lat: null, lon: null, acc: null };
+let currentPos = null;
 
-// 記住名字
-document.getElementById("name").value =
-  localStorage.getItem("udm_name") || "";
-
-document.getElementById("name").addEventListener("change", e => {
-  localStorage.setItem("udm_name", e.target.value);
-});
-
-// 取得 GPS
-navigator.geolocation.watchPosition(
+navigator.geolocation.getCurrentPosition(
   pos => {
-    gps.lat = pos.coords.latitude;
-    gps.lon = pos.coords.longitude;
-    gps.acc = pos.coords.accuracy;
-
-    lat.innerText = gps.lat.toFixed(6);
-    lon.innerText = gps.lon.toFixed(6);
-    acc.innerText = gps.acc.toFixed(1);
+    currentPos = pos.coords;
+    document.getElementById("gps").innerHTML =
+      `📍 緯度: ${currentPos.latitude}<br>` +
+      `📍 經度: ${currentPos.longitude}<br>` +
+      `🎯 精準度: ${currentPos.accuracy} m`;
   },
   err => {
-    status.innerHTML = "❌ 無法取得 GPS";
-    status.className = "info err";
+    document.getElementById("gps").innerHTML = "❌ 無法取得 GPS";
   },
   { enableHighAccuracy: true }
 );
@@ -89,32 +82,39 @@ function punch(action) {
     alert("請輸入姓名");
     return;
   }
-
-  if (!gps.lat) {
-    alert("GPS 尚未定位完成");
+  if (!currentPos) {
+    alert("GPS 尚未就緒");
     return;
   }
 
-  status.innerHTML = "⏳ 傳送中…";
-  status.className = "info";
+  const payload = {
+    type: "attendance",
+    name: name,
+    action: action,
+    lat: currentPos.latitude,
+    lon: currentPos.longitude,
+    accuracy: currentPos.accuracy,
+    distance: 0,
+    device: "github-page"
+  };
 
-  const url = `${API_URL}?type=attendance`
-    + `&name=${encodeURIComponent(name)}`
-    + `&action=${action}`
-    + `&lat=${gps.lat}`
-    + `&lon=${gps.lon}`
-    + `&accuracy=${gps.acc}`
-    + `&device=mobile`;
-
-  fetch(url)
+  fetch(API_URL, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  })
     .then(r => r.json())
-    .then(j => {
-      status.innerHTML = "✅ 打卡成功";
-      status.className = "info ok";
+    .then(res => {
+      if (res.status === "ok") {
+        document.getElementById("result").innerHTML =
+          `<span class="ok">✅ ${action} 打卡成功</span>`;
+      } else {
+        document.getElementById("result").innerHTML =
+          `<span class="error">❌ 失敗</span>`;
+      }
     })
-    .catch(e => {
-      status.innerHTML = "❌ 連線失敗";
-      status.className = "info err";
+    .catch(() => {
+      document.getElementById("result").innerHTML =
+        `<span class="error">❌ 連線失敗</span>`;
     });
 }
 </script>
