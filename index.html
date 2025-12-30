@@ -78,8 +78,8 @@
 
     <input id="empId" placeholder="工號（例 U001）" />
 
-    <button id="btnIn" class="in" onclick="punch('上班')">🕘 上班</button>
-    <button id="btnOut" class="out" onclick="punch('下班')">🕕 下班</button>
+    <button id="btnIn" class="in">🕘 上班</button>
+    <button id="btnOut" class="out">🕕 下班</button>
 
     <div class="msg" id="msg">待命</div>
     <div class="sub" id="sub"></div>
@@ -88,29 +88,41 @@
 </div>
 
 <script>
-/* ========= Apps Script Web App URL ========= */
+/* ===== Apps Script Web App URL ===== */
 const API_URL =
 "https://script.google.com/macros/s/AKfycbyGMYNPD7X5ngEKJnQ8vUe1T7-zpo9vWsAboYkod568iKbCSFD-IiHAR-d6VJW5rNxx/exec";
 
-/* ========= UI helpers ========= */
+/* ===== DOM ===== */
+const empIdInput = document.getElementById("empId");
+const btnIn = document.getElementById("btnIn");
+const btnOut = document.getElementById("btnOut");
+const msg = document.getElementById("msg");
+const sub = document.getElementById("sub");
+const dbg = document.getElementById("dbg");
+
+/* ===== UI ===== */
 function setBusy(b){
   btnIn.disabled = b;
   btnOut.disabled = b;
 }
 
-function setMsg(m,s=""){
+function setMsg(m, s=""){
   msg.innerText = m;
   sub.innerText = s;
 }
 
-/* ========= Punch ========= */
+/* ===== Events ===== */
+btnIn.onclick = () => punch("上班");
+btnOut.onclick = () => punch("下班");
+
+/* ===== Punch ===== */
 function punch(action){
   if (!navigator.geolocation) {
     setMsg("此瀏覽器不支援 GPS");
     return;
   }
 
-  const empId = document.getElementById("empId").value.trim();
+  const empId = empIdInput.value.trim();
   if(!empId){
     setMsg("請輸入工號");
     return;
@@ -120,7 +132,7 @@ function punch(action){
   setMsg("取得 GPS 中…","請允許定位（精確位置）");
 
   navigator.geolocation.getCurrentPosition(
-    pos=>{
+    pos => {
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
       const acc = pos.coords.accuracy;
@@ -133,10 +145,11 @@ function punch(action){
         action,
         lat,
         lng,
+        accuracy: acc,
         device: navigator.userAgent
       });
     },
-    err=>{
+    err => {
       setBusy(false);
       setMsg("GPS 失敗", err.message);
     },
@@ -144,7 +157,7 @@ function punch(action){
   );
 }
 
-/* ========= Send to API ========= */
+/* ===== Send ===== */
 function send(payload){
   setMsg("送出中…","寫入 Google Sheet");
 
@@ -153,27 +166,16 @@ function send(payload){
     headers:{ "Content-Type":"text/plain;charset=utf-8" },
     body: JSON.stringify(payload)
   })
-  .then(r=>{
-    if(!r.ok) throw new Error("HTTP " + r.status);
-    return r.text();
-  })
-  .then(t=>{
+  .then(r => r.text())
+  .then(t => {
     setBusy(false);
-    let d;
-    try{ d = JSON.parse(t); }
-    catch{
-      setMsg("回傳格式錯誤");
-      console.log(t);
-      return;
-    }
-
-    const dist = d.distance_m!=null ? `（${d.distance_m} m）` : "";
-    setMsg(`結果：${d.status} ${dist}`, d.message || "");
+    const d = JSON.parse(t);
+    setMsg(`結果：${d.status}`, d.message || "");
   })
-  .catch(e=>{
+  .catch(e => {
     setBusy(false);
     setMsg("送出失敗", e.message);
-    console.log(e);
+    console.error(e);
   });
 }
 </script>
