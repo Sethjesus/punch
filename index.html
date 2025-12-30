@@ -2,69 +2,114 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>公司 GPS 打卡</title>
+
   <style>
-    :root{--b:#2563eb;--g:#16a34a;--bg:#f4f6f8;--card:#fff;--txt:#111827;--muted:#6b7280}
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;color:var(--txt)}
-    .wrap{max-width:460px;margin:0 auto;padding:18px}
-    .card{background:var(--card);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.08);padding:18px}
-    h1{margin:6px 0 14px;text-align:center;font-size:28px}
-    .pin{margin-right:6px}
-    .field{margin:10px 0}
-    label{display:block;font-size:13px;color:var(--muted);margin:0 0 6px}
-    input{width:100%;padding:14px 12px;font-size:18px;border:1px solid #d1d5db;border-radius:12px;outline:none}
-    input:focus{border-color:#93c5fd;box-shadow:0 0 0 3px rgba(147,197,253,.35)}
-    .btns{display:grid;grid-template-columns:1fr;gap:10px;margin-top:12px}
-    button{width:100%;padding:14px 12px;font-size:20px;border:0;border-radius:14px;color:#fff;font-weight:700}
-    .btn-in{background:var(--b)}
-    .btn-out{background:var(--g)}
-    button:disabled{opacity:.6}
-    .info{margin-top:14px;text-align:center;font-size:16px;font-weight:700}
-    .sub{margin-top:6px;text-align:center;color:var(--muted);font-size:13px;white-space:pre-wrap}
-    .badge{display:inline-block;margin:8px auto 0;padding:6px 10px;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:12px}
-    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+    body{
+      margin:0;
+      background:#f4f6f8;
+      font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif;
+    }
+    .wrap{
+      max-width:420px;
+      margin:0 auto;
+      padding:20px;
+    }
+    .card{
+      background:#fff;
+      border-radius:16px;
+      padding:20px;
+      box-shadow:0 10px 25px rgba(0,0,0,.1);
+    }
+    h1{
+      text-align:center;
+      margin:5px 0 20px;
+      font-size:26px;
+    }
+    input{
+      width:100%;
+      padding:14px;
+      font-size:18px;
+      border-radius:12px;
+      border:1px solid #ccc;
+      margin-bottom:12px;
+    }
+    button{
+      width:100%;
+      padding:14px;
+      font-size:20px;
+      border-radius:14px;
+      border:none;
+      color:#fff;
+      font-weight:700;
+      margin-bottom:10px;
+    }
+    .in{ background:#2563eb; }
+    .out{ background:#16a34a; }
+    button:disabled{ opacity:.6; }
+    .msg{
+      text-align:center;
+      font-size:18px;
+      font-weight:700;
+      margin-top:10px;
+    }
+    .sub{
+      text-align:center;
+      font-size:13px;
+      color:#666;
+      margin-top:6px;
+      white-space:pre-wrap;
+    }
+    .dbg{
+      margin-top:10px;
+      font-size:12px;
+      color:#333;
+      text-align:center;
+      font-family:monospace;
+    }
   </style>
 </head>
 
 <body>
-  <div class="wrap">
-    <div class="card">
-      <h1><span class="pin">📍</span>公司 GPS 打卡</h1>
+<div class="wrap">
+  <div class="card">
+    <h1>📍 公司 GPS 打卡</h1>
 
-      <div class="field">
-        <label>工號（例如 U001）</label>
-        <input id="empId" placeholder="U001" autocomplete="off" inputmode="text" />
-      </div>
+    <input id="empId" placeholder="工號（例 U001）" />
 
-      <div class="btns">
-        <button class="btn-in" id="btnIn" onclick="punch('上班')">🕘 上班</button>
-        <button class="btn-out" id="btnOut" onclick="punch('下班')">🕕 下班</button>
-      </div>
+    <button id="btnIn" class="in" onclick="punch('上班')">🕘 上班</button>
+    <button id="btnOut" class="out" onclick="punch('下班')">🕕 下班</button>
 
-      <div class="info" id="msg">待命</div>
-      <div class="sub" id="sub"></div>
-      <div class="badge mono" id="dbg"></div>
-    </div>
+    <div class="msg" id="msg">待命</div>
+    <div class="sub" id="sub"></div>
+    <div class="dbg" id="dbg"></div>
   </div>
+</div>
 
 <script>
-/* ====== 你的 Apps Script Web App URL ====== */
-const API_URL = "https://script.google.com/macros/s/AKfycbyaAfzMo4o1IoFVdq1L7abwBYJNiWAtr5sn2C3l8CR9v_A2lC1OxT02cN1YgcgOnd1t/exec";
+/* ========= Apps Script Web App URL ========= */
+const API_URL =
+"https://script.google.com/macros/s/AKfycbyGMYNPD7X5ngEKJnQ8vUe1T7-zpo9vWsAboYkod568iKbCSFD-IiHAR-d6VJW5rNxx/exec";
 
-/* ====== UI helpers ====== */
-function setBusy(isBusy){
-  document.getElementById("btnIn").disabled = isBusy;
-  document.getElementById("btnOut").disabled = isBusy;
-}
-function setMsg(main, sub=""){
-  document.getElementById("msg").innerText = main;
-  document.getElementById("sub").innerText = sub;
+/* ========= UI helpers ========= */
+function setBusy(b){
+  btnIn.disabled = b;
+  btnOut.disabled = b;
 }
 
-/* ====== Punch flow ====== */
+function setMsg(m,s=""){
+  msg.innerText = m;
+  sub.innerText = s;
+}
+
+/* ========= Punch ========= */
 function punch(action){
+  if (!navigator.geolocation) {
+    setMsg("此瀏覽器不支援 GPS");
+    return;
+  }
+
   const empId = document.getElementById("empId").value.trim();
   if(!empId){
     setMsg("請輸入工號");
@@ -72,70 +117,63 @@ function punch(action){
   }
 
   setBusy(true);
-  setMsg("取得 GPS 中…", "請確認已允許「精確位置」權限");
-
-  if(!navigator.geolocation){
-    setBusy(false);
-    setMsg("瀏覽器不支援 GPS");
-    return;
-  }
+  setMsg("取得 GPS 中…","請允許定位（精確位置）");
 
   navigator.geolocation.getCurrentPosition(
-    pos => {
+    pos=>{
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
-      const acc = pos.coords.accuracy; // meters
-      document.getElementById("dbg").innerText =
-        `lat ${lat.toFixed(6)} | lng ${lng.toFixed(6)} | acc ${Math.round(acc)}m`;
+      const acc = pos.coords.accuracy;
 
-      setMsg("送出中…", "正在寫入 Google Sheet");
-      sendToApi({ empId, action, lat, lng, device: navigator.userAgent });
+      dbg.innerText =
+        `lat=${lat.toFixed(6)} lng=${lng.toFixed(6)} acc=${Math.round(acc)}m`;
+
+      send({
+        empId,
+        action,
+        lat,
+        lng,
+        device: navigator.userAgent
+      });
     },
-    err => {
+    err=>{
       setBusy(false);
-      let reason = err.message || "";
-      if (err.code === 1) reason = "未授權位置（請到 Chrome 權限開啟「精確位置」）";
-      if (err.code === 2) reason = "位置不可用（請開啟定位服務/高精準度）";
-      if (err.code === 3) reason = "定位逾時（請到空曠處再試）";
-      setMsg("GPS 失敗", reason);
+      setMsg("GPS 失敗", err.message);
     },
-    { enableHighAccuracy:true, timeout:15000, maximumAge:0 }
+    { enableHighAccuracy:true, timeout:15000 }
   );
 }
 
-/* ====== API call (CORS-safe) ======
-   用 text/plain 避免 preflight，Apps Script 才穩
-*/
-function sendToApi(payload){
-  fetch(API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
+/* ========= Send to API ========= */
+function send(payload){
+  setMsg("送出中…","寫入 Google Sheet");
+
+  fetch(API_URL,{
+    method:"POST",
+    headers:{ "Content-Type":"text/plain;charset=utf-8" },
     body: JSON.stringify(payload)
   })
-  .then(r => r.text())
-  .then(t => {
+  .then(r=>{
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    return r.text();
+  })
+  .then(t=>{
     setBusy(false);
-    let data;
-    try { data = JSON.parse(t); }
-    catch(e){
-      setMsg("回傳解析失敗", "伺服器回應不是 JSON（請看 console）");
-      console.log("RAW:", t);
+    let d;
+    try{ d = JSON.parse(t); }
+    catch{
+      setMsg("回傳格式錯誤");
+      console.log(t);
       return;
     }
 
-    // 顯示結果
-    const dist = (data.distance_m !== undefined && data.distance_m !== null)
-      ? `（${data.distance_m} m）` : "";
-    setMsg(`結果：${data.status} ${dist}`.trim());
-
-    if (data.message) {
-      document.getElementById("sub").innerText = data.message;
-    }
+    const dist = d.distance_m!=null ? `（${d.distance_m} m）` : "";
+    setMsg(`結果：${d.status} ${dist}`, d.message || "");
   })
-  .catch(err => {
+  .catch(e=>{
     setBusy(false);
-    setMsg("送出失敗", "可能是網路、CORS、或 API URL 錯誤");
-    console.log(err);
+    setMsg("送出失敗", e.message);
+    console.log(e);
   });
 }
 </script>
