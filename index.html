@@ -1,75 +1,131 @@
-<!doctype html>
-<html lang="zh-Hant">
+<!DOCTYPE html>
+<html lang="zh-TW">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#111827">
-  <title>手機打卡</title>
-  <style>
-    body{font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif;margin:0;background:#f3f4f6}
-    .wrap{max-width:420px;margin:0 auto;padding:18px}
-    .card{background:#fff;border-radius:16px;padding:16px;box-shadow:0 6px 18px rgba(0,0,0,.08)}
-    button{width:100%;padding:14px;border:0;border-radius:14px;font-size:18px;margin-top:10px}
-    .in{background:#10b981;color:#fff}
-    .out{background:#3b82f6;color:#fff}
-    input{width:100%;padding:12px;border-radius:12px;border:1px solid #ddd;margin-top:8px;font-size:16px}
-    .msg{margin-top:12px;white-space:pre-wrap;color:#111827}
-  </style>
+<meta charset="UTF-8">
+<title>打卡 / 請假系統</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body {
+  font-family: system-ui, sans-serif;
+  max-width: 420px;
+  margin: auto;
+  padding: 20px;
+}
+h2 { margin-top: 24px; }
+button {
+  width: 100%;
+  padding: 14px;
+  margin: 8px 0;
+  font-size: 16px;
+}
+input, textarea {
+  width: 100%;
+  padding: 10px;
+  margin: 6px 0;
+  font-size: 14px;
+}
+textarea { min-height: 60px; }
+pre {
+  background: #f4f4f4;
+  padding: 10px;
+  white-space: pre-wrap;
+}
+hr { margin: 24px 0; }
+</style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="card">
-      <h2>手機打卡</h2>
-      <label>員工編號</label>
-      <input id="emp" placeholder="例如：A001" />
-      <button class="in" onclick="punch('IN')">上班打卡</button>
-      <button class="out" onclick="punch('OUT')">下班打卡</button>
-      <div class="msg" id="msg"></div>
-      <hr>
-      <a href="leave.html">我要請假</a> ｜ <a href="admin.html">主管/後台</a>
-    </div>
-  </div>
+
+<h2>📍 GPS 打卡</h2>
+<button onclick="punch('in')">🟢 上班打卡</button>
+<button onclick="punch('out')">🔴 下班打卡</button>
+
+<hr>
+
+<h2>📝 請假申請</h2>
+
+<label>請假日期</label>
+<input id="leaveDate" type="date">
+
+<label>開始時間</label>
+<input id="leaveFrom" type="time">
+
+<label>結束時間</label>
+<input id="leaveTo" type="time">
+
+<textarea id="leaveReason" placeholder="請假原因"></textarea>
+
+<button onclick="leave()">📤 送出請假</button>
+
+<hr>
+
+<pre id="result">等待操作...</pre>
 
 <script>
-const API_BASE = "https://YOUR-WORKER-URL"; // 改成你的 Workers URL
+const API_BASE = "https://punch-api.jackey1688.workers.dev";
+const userId = "jackey"; // 之後可改登入/參數
 
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./sw.js");
-}
+/* ===== 打卡 ===== */
+function punch(type) {
+  const result = document.getElementById("result");
+  result.textContent = "取得 GPS 中...";
 
-function setMsg(t){ document.getElementById("msg").textContent = t; }
+  if (!navigator.geolocation) {
+    result.textContent = "此裝置不支援 GPS";
+    return;
+  }
 
-async function getLocation(){
-  return new Promise((resolve) => {
-    if(!navigator.geolocation) return resolve(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos)=> resolve({lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy}),
-      ()=> resolve(null),
-      {enableHighAccuracy:true, timeout:8000}
-    );
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const payload = {
+      userId,
+      type,
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude
+    };
+
+    try {
+      const res = await fetch(`${API_BASE}/api/punch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      result.textContent = JSON.stringify(data, null, 2);
+    } catch (e) {
+      result.textContent = "打卡失敗：" + e.message;
+    }
+  }, err => {
+    result.textContent = "GPS 失敗：" + err.message;
   });
 }
 
-async function punch(type){
-  const employeeId = document.getElementById("emp").value.trim();
-  if(!employeeId){ setMsg("請先輸入員工編號"); return; }
+/* ===== 請假 ===== */
+async function leave() {
+  const date = document.getElementById("leaveDate").value;
+  const from = document.getElementById("leaveFrom").value;
+  const to = document.getElementById("leaveTo").value;
+  const reason = document.getElementById("leaveReason").value;
+  const result = document.getElementById("result");
 
-  setMsg("定位中…");
-  const loc = await getLocation();
+  if (!date || !from || !to || !reason) {
+    result.textContent = "請填寫完整請假資訊（日期＋時間＋原因）";
+    return;
+  }
 
-  setMsg("送出中…");
-  const payload = { employeeId, type, location: loc, clientTime: new Date().toISOString() };
+  const payload = { userId, date, from, to, reason };
 
-  const r = await fetch(`${API_BASE}/api/punch`, {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify(payload)
-  });
-
-  const txt = await r.text();
-  setMsg(r.ok ? `成功：${txt}` : `失敗：${r.status}\n${txt}`);
+  try {
+    const res = await fetch(`${API_BASE}/api/leave`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    result.textContent = JSON.stringify(data, null, 2);
+  } catch (e) {
+    result.textContent = "請假送出失敗：" + e.message;
+  }
 }
 </script>
+
 </body>
 </html>
