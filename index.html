@@ -1,182 +1,74 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
+<!doctype html>
+<html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>公司 GPS 打卡</title>
-
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#111827">
+  <title>手機打卡</title>
   <style>
-    body{
-      margin:0;
-      background:#f4f6f8;
-      font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif;
-    }
-    .wrap{
-      max-width:420px;
-      margin:0 auto;
-      padding:20px;
-    }
-    .card{
-      background:#fff;
-      border-radius:16px;
-      padding:20px;
-      box-shadow:0 10px 25px rgba(0,0,0,.1);
-    }
-    h1{
-      text-align:center;
-      margin:5px 0 20px;
-      font-size:26px;
-    }
-    input{
-      width:100%;
-      padding:14px;
-      font-size:18px;
-      border-radius:12px;
-      border:1px solid #ccc;
-      margin-bottom:12px;
-    }
-    button{
-      width:100%;
-      padding:14px;
-      font-size:20px;
-      border-radius:14px;
-      border:none;
-      color:#fff;
-      font-weight:700;
-      margin-bottom:10px;
-    }
-    .in{ background:#2563eb; }
-    .out{ background:#16a34a; }
-    button:disabled{ opacity:.6; }
-    .msg{
-      text-align:center;
-      font-size:18px;
-      font-weight:700;
-      margin-top:10px;
-    }
-    .sub{
-      text-align:center;
-      font-size:13px;
-      color:#666;
-      margin-top:6px;
-      white-space:pre-wrap;
-    }
-    .dbg{
-      margin-top:10px;
-      font-size:12px;
-      color:#333;
-      text-align:center;
-      font-family:monospace;
-    }
+    body{font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif;margin:0;background:#f3f4f6}
+    .wrap{max-width:420px;margin:0 auto;padding:18px}
+    .card{background:#fff;border-radius:16px;padding:16px;box-shadow:0 6px 18px rgba(0,0,0,.08)}
+    button{width:100%;padding:14px;border:0;border-radius:14px;font-size:18px;margin-top:10px}
+    .in{background:#10b981;color:#fff}
+    .out{background:#3b82f6;color:#fff}
+    input{width:100%;padding:12px;border-radius:12px;border:1px solid #ddd;margin-top:8px;font-size:16px}
+    .msg{margin-top:12px;white-space:pre-wrap;color:#111827}
   </style>
 </head>
-
 <body>
-<div class="wrap">
-  <div class="card">
-    <h1>📍 公司 GPS 打卡</h1>
-
-    <input id="empId" placeholder="工號（例 U001）" />
-
-    <button id="btnIn" class="in">🕘 上班</button>
-    <button id="btnOut" class="out">🕕 下班</button>
-
-    <div class="msg" id="msg">待命</div>
-    <div class="sub" id="sub"></div>
-    <div class="dbg" id="dbg"></div>
+  <div class="wrap">
+    <div class="card">
+      <h2>手機打卡</h2>
+      <label>員工編號</label>
+      <input id="emp" placeholder="例如：A001" />
+      <button class="in" onclick="punch('IN')">上班打卡</button>
+      <button class="out" onclick="punch('OUT')">下班打卡</button>
+      <div class="msg" id="msg"></div>
+      <hr>
+      <a href="leave.html">我要請假</a> ｜ <a href="admin.html">主管/後台</a>
+    </div>
   </div>
-</div>
 
 <script>
-/* ===== Apps Script Web App URL ===== */
-const API_URL =
-"https://script.google.com/macros/s/AKfycbyGMYNPD7X5ngEKJnQ8vUe1T7-zpo9vWsAboYkod568iKbCSFD-IiHAR-d6VJW5rNxx/exec";
+const API_BASE = "https://YOUR-WORKER-URL"; // 改成你的 Workers URL
 
-/* ===== DOM ===== */
-const empIdInput = document.getElementById("empId");
-const btnIn = document.getElementById("btnIn");
-const btnOut = document.getElementById("btnOut");
-const msg = document.getElementById("msg");
-const sub = document.getElementById("sub");
-const dbg = document.getElementById("dbg");
-
-/* ===== UI ===== */
-function setBusy(b){
-  btnIn.disabled = b;
-  btnOut.disabled = b;
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js");
 }
 
-function setMsg(m, s=""){
-  msg.innerText = m;
-  sub.innerText = s;
-}
+function setMsg(t){ document.getElementById("msg").textContent = t; }
 
-/* ===== Events ===== */
-btnIn.onclick = () => punch("上班");
-btnOut.onclick = () => punch("下班");
-
-/* ===== Punch ===== */
-function punch(action){
-  if (!navigator.geolocation) {
-    setMsg("此瀏覽器不支援 GPS");
-    return;
-  }
-
-  const empId = empIdInput.value.trim();
-  if(!empId){
-    setMsg("請輸入工號");
-    return;
-  }
-
-  setBusy(true);
-  setMsg("取得 GPS 中…","請允許定位（精確位置）");
-
-  navigator.geolocation.getCurrentPosition(
-    pos => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-      const acc = pos.coords.accuracy;
-
-      dbg.innerText =
-        `lat=${lat.toFixed(6)} lng=${lng.toFixed(6)} acc=${Math.round(acc)}m`;
-
-      send({
-        empId,
-        action,
-        lat,
-        lng,
-        accuracy: acc,
-        device: navigator.userAgent
-      });
-    },
-    err => {
-      setBusy(false);
-      setMsg("GPS 失敗", err.message);
-    },
-    { enableHighAccuracy:true, timeout:15000 }
-  );
-}
-
-/* ===== Send ===== */
-function send(payload){
-  setMsg("送出中…","寫入 Google Sheet");
-
-  fetch(API_URL,{
-    method:"POST",
-    headers:{ "Content-Type":"text/plain;charset=utf-8" },
-    body: JSON.stringify(payload)
-  })
-  .then(r => r.text())
-  .then(t => {
-    setBusy(false);
-    const d = JSON.parse(t);
-    setMsg(`結果：${d.status}`, d.message || "");
-  })
-  .catch(e => {
-    setBusy(false);
-    setMsg("送出失敗", e.message);
-    console.error(e);
+async function getLocation(){
+  return new Promise((resolve) => {
+    if(!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos)=> resolve({lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy}),
+      ()=> resolve(null),
+      {enableHighAccuracy:true, timeout:8000}
+    );
   });
+}
+
+async function punch(type){
+  const employeeId = document.getElementById("emp").value.trim();
+  if(!employeeId){ setMsg("請先輸入員工編號"); return; }
+
+  setMsg("定位中…");
+  const loc = await getLocation();
+
+  setMsg("送出中…");
+  const payload = { employeeId, type, location: loc, clientTime: new Date().toISOString() };
+
+  const r = await fetch(`${API_BASE}/api/punch`, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  const txt = await r.text();
+  setMsg(r.ok ? `成功：${txt}` : `失敗：${r.status}\n${txt}`);
 }
 </script>
 </body>
