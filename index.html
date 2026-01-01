@@ -9,6 +9,7 @@ body { font-family: system-ui; background:#f4f6f8; }
 .card { max-width:420px; margin:20px auto; background:#fff; padding:20px; border-radius:12px; }
 button { width:100%; padding:12px; margin:6px 0; font-size:16px; }
 input, select { width:100%; padding:10px; margin:6px 0; }
+h2 { margin-top:0 }
 </style>
 </head>
 <body>
@@ -19,7 +20,7 @@ input, select { width:100%; padding:10px; margin:6px 0; }
 <button onclick="punch('out')">下班打卡</button>
 
 <select id="reason">
-  <option value="">外出原因</option>
+  <option value="">外出原因（僅外出用）</option>
   <option value="洽公">洽公</option>
   <option value="取件">取件</option>
   <option value="會議">會議</option>
@@ -44,15 +45,15 @@ input, select { width:100%; padding:10px; margin:6px 0; }
 const API = "https://punch-api.jackey1688.workers.dev";
 const USER = "jackey";
 
-// 公司座標（只改這裡）
+// 公司座標
 const OFFICE = { lat: 25.04776, lng: 121.53185 };
 
 function getLocation(){
   return new Promise((resolve,reject)=>{
     navigator.geolocation.getCurrentPosition(
       p=>resolve({lat:p.coords.latitude,lng:p.coords.longitude}),
-      reject,
-      { enableHighAccuracy:true }
+      ()=>reject("無法取得 GPS"),
+      { enableHighAccuracy:true, timeout:10000 }
     );
   });
 }
@@ -67,38 +68,48 @@ function distanceMeter(lat1,lng1,lat2,lng2){
 }
 
 async function punch(type){
-  const loc = await getLocation();
-  const dist = distanceMeter(loc.lat,loc.lng,OFFICE.lat,OFFICE.lng);
-  const reason = document.getElementById("reason").value;
+  try{
+    const loc = await getLocation();
+    const dist = distanceMeter(loc.lat,loc.lng,OFFICE.lat,OFFICE.lng);
+    const reason = type==="business" ? document.getElementById("reason").value : "";
 
-  const res = await fetch(API+"/api/punch",{
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body:JSON.stringify({
-      userId:USER,
-      type,
-      reason,
-      lat:loc.lat,
-      lng:loc.lng,
-      distance:dist
-    })
-  });
+    await fetch(API+"/api/punch",{
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({
+        userId:USER,
+        type,
+        reason,
+        lat:loc.lat,
+        lng:loc.lng,
+        distance:dist
+      })
+    });
 
-  alert("完成：" + type + "（距公司 " + dist + " 公尺）");
+    alert(`完成：${type}\n距公司 ${dist} 公尺`);
+  }catch(e){
+    alert(e);
+  }
 }
 
 async function leave(){
+  if(!leaveDate.value){
+    alert("請選擇日期");
+    return;
+  }
+
   await fetch(API+"/api/leave",{
     method:"POST",
     headers:{ "Content-Type":"application/json" },
     body:JSON.stringify({
       userId:USER,
       date:leaveDate.value,
-      from:fromTime.value,
-      to:toTime.value,
+      from:fromTime.value || null,
+      to:toTime.value || null,
       leaveType:leaveType.value
     })
   });
+
   alert("請假已送出");
 }
 </script>
