@@ -41,6 +41,7 @@ button{
 }
 .in{ background:#2563eb; }
 .out{ background:#16a34a; }
+.leave{ background:#f59e0b; }
 
 .msg{
   text-align:center;
@@ -68,15 +69,17 @@ button{
 <div class="card">
   <h2>📍 公司打卡</h2>
 
-  <!-- 工號 -->
-  <input id="empId" placeholder="工號（例 U001）">
+  <!-- 工號卷軸 -->
+  <select id="empId" onchange="syncName()">
+    <option value="">請選擇工號</option>
+    <option value="U001">U001</option>
+    <option value="U002">U002</option>
+    <option value="U003">U003</option>
+  </select>
 
-  <!-- 姓名卷軸 -->
-  <select id="name">
-    <option value="">請選擇姓名</option>
-    <option value="廖志豪">廖志豪（U001）</option>
-    <option value="摩西">摩西（U002）</option>
-    <option value="彼得">彼得（U003）</option>
+  <!-- 姓名卷軸（自動帶出） -->
+  <select id="name" disabled>
+    <option value="">請先選擇工號</option>
   </select>
 
   <!-- 密碼 -->
@@ -84,26 +87,54 @@ button{
 
   <button class="in" onclick="punch('in')">🕘 上班打卡</button>
   <button class="out" onclick="punch('out')">🕕 下班打卡</button>
+  <button class="leave" onclick="punch('leave')">🏖 請假 / 外出</button>
 
-  <div class="msg" id="msg">請輸入工號、選擇姓名並輸入密碼</div>
+  <div class="msg" id="msg">請選擇工號並輸入密碼</div>
   <div class="sub" id="sub"></div>
 
   <div class="footer">© 公司內部系統</div>
 </div>
 
 <script>
-/* 🔴 換成你的 Cloudflare Worker API */
+/* ✅ 你的 Worker API */
 const API_URL = "https://punch-api.jackey1688.workers.dev/api/punch";
+
 const msg = document.getElementById("msg");
 const sub = document.getElementById("sub");
 
+/* 員工對照表（前端只做顯示，驗證仍在 Worker） */
+const EMP_MAP = {
+  "U001": "廖志豪",
+  "U002": "摩西",
+  "U003": "彼得"
+};
+
+/* 工號 → 姓名自動同步 */
+function syncName(){
+  const empId = document.getElementById("empId").value;
+  const nameSelect = document.getElementById("name");
+
+  nameSelect.innerHTML = "";
+
+  if(!empId){
+    nameSelect.innerHTML = "<option>請先選擇工號</option>";
+    nameSelect.disabled = true;
+    return;
+  }
+
+  const name = EMP_MAP[empId];
+  nameSelect.innerHTML = `<option value="${name}">${name}</option>`;
+  nameSelect.disabled = false;
+}
+
+/* 打卡 */
 function punch(action){
-  const empId = document.getElementById("empId").value.trim();
+  const empId = document.getElementById("empId").value;
   const name = document.getElementById("name").value;
   const password = document.getElementById("password").value.trim();
 
   if(!empId || !name || !password){
-    msg.innerText = "❗ 請填寫完整資料";
+    msg.innerText = "❗ 請完成所有欄位";
     sub.innerText = "";
     return;
   }
@@ -128,10 +159,13 @@ function punch(action){
       .then(r => r.json())
       .then(res => {
         if(res.ok){
-          msg.innerText = `✅ ${res.name} 打卡成功`;
-          sub.innerText = action === "in" ? "上班完成" : "下班完成";
+          msg.innerText = `✅ ${res.name} 操作成功`;
+          sub.innerText =
+            action === "in" ? "上班完成" :
+            action === "out" ? "下班完成" :
+            "請假 / 外出已送出";
         }else{
-          msg.innerText = "❌ 打卡失敗";
+          msg.innerText = "❌ 操作失敗";
           sub.innerText = res.error || "驗證失敗";
         }
       })
