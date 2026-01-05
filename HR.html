@@ -3,116 +3,220 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HR 後台</title>
+<title>HR 打卡後台</title>
+
 <style>
-body{font-family:system-ui;background:#f3f4f6}
-.box{max-width:1100px;margin:24px auto;background:#fff;padding:20px;border-radius:12px}
-table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{padding:8px;border-bottom:1px solid #ddd}
-th{cursor:pointer;background:#f9fafb}
+body{
+  font-family: system-ui, -apple-system, "Noto Sans TC", sans-serif;
+  background:#f3f4f6;
+}
+.container{
+  max-width:1200px;
+  margin:28px auto;
+  background:#fff;
+  padding:22px;
+  border-radius:16px;
+  box-shadow:0 10px 25px rgba(0,0,0,.12);
+}
+h2{margin-bottom:10px}
+.toolbar{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  align-items:center;
+  margin-bottom:12px;
+}
+button,select{
+  padding:8px 12px;
+  border-radius:10px;
+  border:1px solid #ccc;
+  background:#2563eb;
+  color:#fff;
+  font-weight:600;
+  cursor:pointer;
+}
+select{background:#fff;color:#111}
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:14px;
+}
+th,td{
+  padding:10px;
+  border-bottom:1px solid #e5e7eb;
+}
+th{
+  background:#f9fafb;
+  cursor:pointer;
+}
+.bad{color:#b91c1c;font-weight:700}
+.ok{color:#166534}
+.muted{color:#6b7280}
+.footer{
+  margin-top:8px;
+  font-size:12px;
+  color:#6b7280;
+}
 </style>
 </head>
 
 <body>
-<div class="box">
-<h3>HR 打卡後台</h3>
-<button onclick="exportCSV()">匯出 CSV</button>
+<div class="container">
+  <h2>📋 HR 打卡後台</h2>
 
-<table>
-<thead>
-<tr>
-  <th onclick="sortByEmp()">工號</th>
-  <th>姓名</th>
-  <th>動作</th>
-  <th>距離</th>
-  <th>時間</th>
-</tr>
-</thead>
-<tbody id="tbody"></tbody>
-</table>
+  <div class="toolbar">
+    <button onclick="exportCSV()">⬇ 匯出 Excel</button>
+    <button onclick="showWeeklyStats()">📊 每週統計</button>
+
+    <select id="weekdayFilter" onchange="applyFilters()">
+      <option value="">全部星期</option>
+      <option value="一">星期一</option>
+      <option value="二">星期二</option>
+      <option value="三">星期三</option>
+      <option value="四">星期四</option>
+      <option value="五">星期五</option>
+      <option value="六">星期六</option>
+      <option value="日">星期日</option>
+    </select>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th onclick="sortByEmp()">工號</th>
+        <th>姓名</th>
+        <th>動作</th>
+        <th>距離(m)</th>
+        <th>日期</th>
+        <th>星期</th>
+        <th>時間</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+
+  <div class="footer">資料來源：Cloudflare Workers KV</div>
 </div>
 
 <script>
-const API = "https://punch-api.jackey1688.workers.dev/api/admin/attendance";
+/* ========= 設定 ========= */
+const ADMIN_API = "https://punch-api.jackey1688.workers.dev/api/admin/attendance";
+const DIST_LIMIT = 100;
+const WEEK_MAP = ["日","一","二","三","四","五","六"];
 
-/* 2026 行事曆（必要） */
-const ROC_2026 = {
-  holidays:["2026-01-01","2026-02-16","2026-02-17","2026-02-18","2026-02-19","2026-02-20"],
-  workdays:["2026-02-07"]
-};
+let DATA = [];
+let empAsc = true;
 
-function isWorkday(date){
-  if (ROC_2026.workdays.includes(date)) return true;
-  if (ROC_2026.holidays.includes(date)) return false;
-  const d = new Date(date).getDay();
-  return d >= 1 && d <= 5;
+/* ========= 日期工具 ========= */
+function splitDateInfo(iso){
+  const d = new Date(iso);
+  return {
+    y: d.getFullYear(),
+    m: d.getMonth()+1,
+    d: d.getDate(),
+    weekday: WEEK_MAP[d.getDay()],
+    weekdayIndex: d.getDay(),
+    time: d.toLocaleTimeString(),
+    weekKey: getISOWeekKey(d)
+  };
 }
 
-function normalize(a){
-  if(a==="上班") return "IN";
-  if(a==="下班") return "OUT";
-  if(a==="請假") return "LEAVE";
-  return a;
+function getISOWeekKey(date){
+  const d = new Date(Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  const week = Math.ceil((((d - yearStart)/86400000)+1)/7);
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2,"0")}`;
 }
 
-function mergeDaily(data){
-  const map={}, out=[];
-  data.forEach(r=>{
-    const act = normalize(r.action);
-    const date = r.time.slice(0,10);
-    if(!isWorkday(date)) return;
-
-    if(act==="LEAVE"){ out.push(r); return; }
-
-    const k = r.emp_id+date+act;
-    if(!map[k]) map[k]=r;
-    else{
-      const t1=new Date(map[k].time), t2=new Date(r.time);
-      if(act==="IN" && t2<t1) map[k]=r;
-      if(act==="OUT"&& t2>t1) map[k]=r;
-    }
+/* ========= 資料讀取 ========= */
+fetch(ADMIN_API)
+  .then(r=>r.json())
+  .then(list=>{
+    DATA = list || [];
+    render(DATA);
   });
-  return out.concat(Object.values(map));
-}
 
-let DATA=[], asc=true;
+/* ========= 表格 ========= */
+function render(rows){
+  const tbody = document.getElementById("tbody");
+  tbody.innerHTML = "";
 
-fetch(API).then(r=>r.json()).then(d=>{
-  DATA = mergeDaily(d);
-  render();
-});
+  rows.forEach(r=>{
+    const info = splitDateInfo(r.time);
+    const isLeave = r.distance === null;
+    const isBad = !isLeave && r.distance > DIST_LIMIT;
 
-function render(){
-  const tb=document.getElementById("tbody");
-  tb.innerHTML="";
-  DATA.forEach(r=>{
-    tb.innerHTML+=`
+    tbody.insertAdjacentHTML("beforeend",`
       <tr>
         <td>${r.emp_id}</td>
         <td>${r.name}</td>
         <td>${r.action}</td>
-        <td>${r.distance ?? ""}</td>
-        <td>${new Date(r.time).toLocaleString()}</td>
-      </tr>`;
+        <td class="${isLeave?"muted":(isBad?"bad":"ok")}">${isLeave?"—":r.distance}</td>
+        <td>${info.y}/${String(info.m).padStart(2,"0")}/${String(info.d).padStart(2,"0")}</td>
+        <td>${info.weekday}</td>
+        <td>${info.time}</td>
+      </tr>
+    `);
   });
 }
 
+/* ========= 工號排序 ========= */
 function sortByEmp(){
-  DATA.sort((a,b)=>asc
+  DATA.sort((a,b)=>empAsc
     ? a.emp_id.localeCompare(b.emp_id)
     : b.emp_id.localeCompare(a.emp_id)
   );
-  asc=!asc;
-  render();
+  empAsc=!empAsc;
+  applyFilters();
 }
 
-function exportCSV(){
-  let csv="工號,姓名,動作,距離,時間\n";
+/* ========= 星期篩選 ========= */
+function applyFilters(){
+  const w = document.getElementById("weekdayFilter").value;
+  let rows = [...DATA];
+  if(w){
+    rows = rows.filter(r=>splitDateInfo(r.time).weekday===w);
+  }
+  render(rows);
+}
+
+/* ========= 每週統計 ========= */
+function showWeeklyStats(){
+  const map={};
   DATA.forEach(r=>{
-    csv+=`${r.emp_id},${r.name},${r.action},${r.distance ?? ""},${r.time}\n`;
+    const info = splitDateInfo(r.time);
+    const key = `${r.emp_id} ${info.weekKey}`;
+    map[key]=(map[key]||0)+1;
   });
+  let msg="每人每週打卡次數\n\n";
+  Object.entries(map).forEach(([k,v])=>msg+=`${k}：${v} 次\n`);
+  alert(msg);
+}
+
+/* ========= Excel 匯出 ========= */
+function exportCSV(){
+  let csv="工號,姓名,動作,距離(m),日期,星期,時間,是否週末\n";
+
+  DATA.forEach(r=>{
+    const info = splitDateInfo(r.time);
+    const isWeekend = (info.weekdayIndex===0||info.weekdayIndex===6);
+    csv += [
+      r.emp_id,
+      r.name,
+      r.action,
+      r.distance ?? "",
+      `${info.y}/${String(info.m).padStart(2,"0")}/${String(info.d).padStart(2,"0")}`,
+      info.weekday,
+      info.time,
+      isWeekend?"TRUE":"FALSE"
+    ].join(",")+"\n";
+  });
+
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
   const a=document.createElement("a");
-  a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+  a.href=URL.createObjectURL(blob);
   a.download="attendance.csv";
   a.click();
 }
