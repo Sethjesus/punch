@@ -35,9 +35,6 @@ h2{margin:0 0 12px}
   font-weight:600;
   cursor:pointer;
 }
-.toolbar .hint{
-  font-size:13px;color:#555
-}
 table{
   width:100%;
   border-collapse:collapse;
@@ -46,29 +43,17 @@ table{
 th,td{
   padding:10px;
   border-bottom:1px solid #e5e7eb;
-  text-align:left;
 }
 th{
   background:#f9fafb;
-  position:sticky;
-  top:0;
-  z-index:1;
+  cursor:pointer;
+  user-select:none;
 }
-.bad{
-  color:#b91c1c;
-  font-weight:700;
-}
-.ok{
-  color:#166534;
-}
-.muted{
-  color:#6b7280;
-}
-.footer{
-  margin-top:10px;
-  font-size:12px;
-  color:#6b7280;
-}
+.bad{color:#b91c1c;font-weight:700}
+.ok{color:#166534}
+.muted{color:#6b7280}
+.footer{margin-top:10px;font-size:12px;color:#6b7280}
+.sort-indicator{font-size:12px;margin-left:4px}
 </style>
 </head>
 
@@ -78,13 +63,13 @@ th{
 
   <div class="toolbar">
     <button onclick="exportCSV()">⬇ 匯出 CSV</button>
-    <span class="hint">距離超過 <b id="thTxt">100</b> 公尺會標紅</span>
+    <span>點「工號」可排序</span>
   </div>
 
   <table>
     <thead>
       <tr>
-        <th>工號</th>
+        <th onclick="sortByEmp()">工號 <span id="empSort" class="sort-indicator">↕</span></th>
         <th>姓名</th>
         <th>動作</th>
         <th>距離 (m)</th>
@@ -98,23 +83,17 @@ th{
 </div>
 
 <script>
-/* ===== HR API（請確認路徑）===== */
 const ADMIN_API = "https://punch-api.jackey1688.workers.dev/api/admin/attendance";
-
-/* ===== 距離門檻（可自行調整）===== */
-const DIST_LIMIT = 100; // 公尺
+const DIST_LIMIT = 100;
 
 let DATA = [];
+let empAsc = true; // 工號排序方向
 
 fetch(ADMIN_API)
   .then(r => r.json())
   .then(list => {
     DATA = list || [];
     render(DATA);
-  })
-  .catch(() => {
-    document.getElementById("tbody").innerHTML =
-      `<tr><td colspan="5" class="muted">無法讀取資料</td></tr>`;
   });
 
 function render(rows){
@@ -125,20 +104,30 @@ function render(rows){
     const isLeave = r.distance === null;
     const isBad = !isLeave && r.distance > DIST_LIMIT;
 
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${r.emp_id}</td>
-      <td>${r.name}</td>
-      <td>${r.action}</td>
-      <td class="${isLeave ? 'muted' : (isBad ? 'bad' : 'ok')}">
-        ${isLeave ? "—" : r.distance}
-      </td>
-      <td>${new Date(r.time).toLocaleString()}</td>
-    `;
-    tbody.appendChild(tr);
+    tbody.insertAdjacentHTML("beforeend", `
+      <tr>
+        <td>${r.emp_id}</td>
+        <td>${r.name}</td>
+        <td>${r.action}</td>
+        <td class="${isLeave ? 'muted' : (isBad ? 'bad' : 'ok')}">
+          ${isLeave ? "—" : r.distance}
+        </td>
+        <td>${new Date(r.time).toLocaleString()}</td>
+      </tr>
+    `);
+  });
+}
+
+function sortByEmp(){
+  DATA.sort((a, b) => {
+    return empAsc
+      ? a.emp_id.localeCompare(b.emp_id)
+      : b.emp_id.localeCompare(a.emp_id);
   });
 
-  document.getElementById("thTxt").innerText = DIST_LIMIT;
+  empAsc = !empAsc;
+  document.getElementById("empSort").innerText = empAsc ? "↑" : "↓";
+  render(DATA);
 }
 
 function exportCSV(){
