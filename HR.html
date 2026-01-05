@@ -3,143 +3,117 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HR 打卡後台</title>
-
+<title>HR 後台</title>
 <style>
-body{
-  font-family: system-ui, -apple-system, "Noto Sans TC", sans-serif;
-  background:#f3f4f6;
-}
-.container{
-  max-width:1100px;
-  margin:32px auto;
-  background:#fff;
-  padding:24px;
-  border-radius:16px;
-  box-shadow:0 10px 25px rgba(0,0,0,.12);
-}
-h2{margin:0 0 12px}
-.toolbar{
-  display:flex;
-  gap:12px;
-  flex-wrap:wrap;
-  align-items:center;
-  margin-bottom:12px;
-}
-.toolbar button{
-  padding:10px 14px;
-  border:none;
-  border-radius:10px;
-  background:#2563eb;
-  color:#fff;
-  font-weight:600;
-  cursor:pointer;
-}
-table{
-  width:100%;
-  border-collapse:collapse;
-  font-size:14px;
-}
-th,td{
-  padding:10px;
-  border-bottom:1px solid #e5e7eb;
-}
-th{
-  background:#f9fafb;
-  cursor:pointer;
-  user-select:none;
-}
-.bad{color:#b91c1c;font-weight:700}
-.ok{color:#166534}
-.muted{color:#6b7280}
-.footer{margin-top:10px;font-size:12px;color:#6b7280}
-.sort-indicator{font-size:12px;margin-left:4px}
+body{font-family:system-ui;background:#f3f4f6}
+.box{max-width:1100px;margin:24px auto;background:#fff;padding:20px;border-radius:12px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:8px;border-bottom:1px solid #ddd}
+th{cursor:pointer;background:#f9fafb}
 </style>
 </head>
 
 <body>
-<div class="container">
-  <h2>📋 HR 打卡後台</h2>
+<div class="box">
+<h3>HR 打卡後台</h3>
+<button onclick="exportCSV()">匯出 CSV</button>
 
-  <div class="toolbar">
-    <button onclick="exportCSV()">⬇ 匯出 CSV</button>
-    <span>點「工號」可排序</span>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th onclick="sortByEmp()">工號 <span id="empSort" class="sort-indicator">↕</span></th>
-        <th>姓名</th>
-        <th>動作</th>
-        <th>距離 (m)</th>
-        <th>時間</th>
-      </tr>
-    </thead>
-    <tbody id="tbody"></tbody>
-  </table>
-
-  <div class="footer">資料來源：Cloudflare Workers KV</div>
+<table>
+<thead>
+<tr>
+  <th onclick="sortByEmp()">工號</th>
+  <th>姓名</th>
+  <th>動作</th>
+  <th>距離</th>
+  <th>時間</th>
+</tr>
+</thead>
+<tbody id="tbody"></tbody>
+</table>
 </div>
 
 <script>
-const ADMIN_API = "https://punch-api.jackey1688.workers.dev/api/admin/attendance";
-const DIST_LIMIT = 100;
+const API = "https://punch-api.jackey1688.workers.dev/api/admin/attendance";
 
-let DATA = [];
-let empAsc = true; // 工號排序方向
+/* 2026 行事曆（必要） */
+const ROC_2026 = {
+  holidays:["2026-01-01","2026-02-16","2026-02-17","2026-02-18","2026-02-19","2026-02-20"],
+  workdays:["2026-02-07"]
+};
 
-fetch(ADMIN_API)
-  .then(r => r.json())
-  .then(list => {
-    DATA = list || [];
-    render(DATA);
+function isWorkday(date){
+  if (ROC_2026.workdays.includes(date)) return true;
+  if (ROC_2026.holidays.includes(date)) return false;
+  const d = new Date(date).getDay();
+  return d >= 1 && d <= 5;
+}
+
+function normalize(a){
+  if(a==="上班") return "IN";
+  if(a==="下班") return "OUT";
+  if(a==="請假") return "LEAVE";
+  return a;
+}
+
+function mergeDaily(data){
+  const map={}, out=[];
+  data.forEach(r=>{
+    const act = normalize(r.action);
+    const date = r.time.slice(0,10);
+    if(!isWorkday(date)) return;
+
+    if(act==="LEAVE"){ out.push(r); return; }
+
+    const k = r.emp_id+date+act;
+    if(!map[k]) map[k]=r;
+    else{
+      const t1=new Date(map[k].time), t2=new Date(r.time);
+      if(act==="IN" && t2<t1) map[k]=r;
+      if(act==="OUT"&& t2>t1) map[k]=r;
+    }
   });
+  return out.concat(Object.values(map));
+}
 
-function render(rows){
-  const tbody = document.getElementById("tbody");
-  tbody.innerHTML = "";
+let DATA=[], asc=true;
 
-  rows.forEach(r => {
-    const isLeave = r.distance === null;
-    const isBad = !isLeave && r.distance > DIST_LIMIT;
+fetch(API).then(r=>r.json()).then(d=>{
+  DATA = mergeDaily(d);
+  render();
+});
 
-    tbody.insertAdjacentHTML("beforeend", `
+function render(){
+  const tb=document.getElementById("tbody");
+  tb.innerHTML="";
+  DATA.forEach(r=>{
+    tb.innerHTML+=`
       <tr>
         <td>${r.emp_id}</td>
         <td>${r.name}</td>
         <td>${r.action}</td>
-        <td class="${isLeave ? 'muted' : (isBad ? 'bad' : 'ok')}">
-          ${isLeave ? "—" : r.distance}
-        </td>
+        <td>${r.distance ?? ""}</td>
         <td>${new Date(r.time).toLocaleString()}</td>
-      </tr>
-    `);
+      </tr>`;
   });
 }
 
 function sortByEmp(){
-  DATA.sort((a, b) => {
-    return empAsc
-      ? a.emp_id.localeCompare(b.emp_id)
-      : b.emp_id.localeCompare(a.emp_id);
-  });
-
-  empAsc = !empAsc;
-  document.getElementById("empSort").innerText = empAsc ? "↑" : "↓";
-  render(DATA);
+  DATA.sort((a,b)=>asc
+    ? a.emp_id.localeCompare(b.emp_id)
+    : b.emp_id.localeCompare(a.emp_id)
+  );
+  asc=!asc;
+  render();
 }
 
 function exportCSV(){
-  let csv = "工號,姓名,動作,距離(m),時間\n";
-  DATA.forEach(r => {
-    csv += `${r.emp_id},${r.name},${r.action},${r.distance ?? ""},${r.time}\n`;
+  let csv="工號,姓名,動作,距離,時間\n";
+  DATA.forEach(r=>{
+    csv+=`${r.emp_id},${r.name},${r.action},${r.distance ?? ""},${r.time}\n`;
   });
-
-  const blob = new Blob([csv], { type:"text/csv;charset=utf-8;" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "attendance.csv";
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+  a.download="attendance.csv";
   a.click();
 }
 </script>
