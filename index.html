@@ -19,7 +19,7 @@ body{
   box-shadow:0 12px 28px rgba(0,0,0,.15);
 }
 h2{text-align:center;margin-bottom:22px}
-input, select{
+select,input{
   width:100%;
   padding:14px;
   font-size:17px;
@@ -69,7 +69,7 @@ button{
 <div class="card">
   <h2>📍 公司打卡</h2>
 
-  <!-- 工號卷軸 -->
+  <!-- 工號（卷軸） -->
   <select id="empId" onchange="syncName()">
     <option value="">請選擇工號</option>
     <option value="U001">U001</option>
@@ -77,10 +77,8 @@ button{
     <option value="U003">U003</option>
   </select>
 
-  <!-- 姓名卷軸（自動帶出） -->
-  <select id="name" disabled>
-    <option value="">請先選擇工號</option>
-  </select>
+  <!-- 姓名（自動顯示，不可輸入） -->
+  <input id="name" placeholder="姓名" readonly>
 
   <!-- 密碼 -->
   <input id="password" type="password" placeholder="密碼">
@@ -96,45 +94,32 @@ button{
 </div>
 
 <script>
-/* ✅ 你的 Worker API */
+/* 🔴 換成你的 Worker API */
 const API_URL = "https://punch-api.jackey1688.workers.dev/api/punch";
 
-const msg = document.getElementById("msg");
-const sub = document.getElementById("sub");
 
-/* 員工對照表（前端只做顯示，驗證仍在 Worker） */
+/* 🔹 前端員工對照表（之後可由 KV / API 取代） */
 const EMP_MAP = {
   "U001": "廖志豪",
   "U002": "摩西",
   "U003": "彼得"
 };
 
-/* 工號 → 姓名自動同步 */
+const msg = document.getElementById("msg");
+const sub = document.getElementById("sub");
+
 function syncName(){
   const empId = document.getElementById("empId").value;
-  const nameSelect = document.getElementById("name");
-
-  nameSelect.innerHTML = "";
-
-  if(!empId){
-    nameSelect.innerHTML = "<option>請先選擇工號</option>";
-    nameSelect.disabled = true;
-    return;
-  }
-
-  const name = EMP_MAP[empId];
-  nameSelect.innerHTML = `<option value="${name}">${name}</option>`;
-  nameSelect.disabled = false;
+  document.getElementById("name").value = EMP_MAP[empId] || "";
 }
 
-/* 打卡 */
 function punch(action){
   const empId = document.getElementById("empId").value;
   const name = document.getElementById("name").value;
   const password = document.getElementById("password").value.trim();
 
   if(!empId || !name || !password){
-    msg.innerText = "❗ 請完成所有欄位";
+    msg.innerText = "❗ 請填寫完整資料";
     sub.innerText = "";
     return;
   }
@@ -159,19 +144,20 @@ function punch(action){
       .then(r => r.json())
       .then(res => {
         if(res.ok){
-          msg.innerText = `✅ ${res.name} 操作成功`;
-          sub.innerText =
-            action === "in" ? "上班完成" :
-            action === "out" ? "下班完成" :
-            "請假 / 外出已送出";
+          msg.innerText = `✅ ${res.name} 打卡成功`;
+          sub.innerText = action === "in"
+            ? "上班完成"
+            : action === "out"
+              ? "下班完成"
+              : "已記錄請假 / 外出";
         }else{
-          msg.innerText = "❌ 操作失敗";
+          msg.innerText = "❌ 打卡失敗";
           sub.innerText = res.error || "驗證失敗";
         }
       })
       .catch(() => {
         msg.innerText = "❌ 系統錯誤";
-        sub.innerText = "請稍後再試";
+        sub.innerText = "無法連線至伺服器";
       });
     },
     err => {
