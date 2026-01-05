@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HR 打卡後台</title>
+
+<style>
+body{
+  font-family: system-ui, -apple-system, "Noto Sans TC", sans-serif;
+  background:#f3f4f6;
+}
+.container{
+  max-width:1100px;
+  margin:32px auto;
+  background:#fff;
+  padding:24px;
+  border-radius:16px;
+  box-shadow:0 10px 25px rgba(0,0,0,.12);
+}
+h2{margin:0 0 12px}
+.toolbar{
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+  align-items:center;
+  margin-bottom:12px;
+}
+.toolbar button{
+  padding:10px 14px;
+  border:none;
+  border-radius:10px;
+  background:#2563eb;
+  color:#fff;
+  font-weight:600;
+  cursor:pointer;
+}
+.toolbar .hint{
+  font-size:13px;color:#555
+}
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:14px;
+}
+th,td{
+  padding:10px;
+  border-bottom:1px solid #e5e7eb;
+  text-align:left;
+}
+th{
+  background:#f9fafb;
+  position:sticky;
+  top:0;
+  z-index:1;
+}
+.bad{
+  color:#b91c1c;
+  font-weight:700;
+}
+.ok{
+  color:#166534;
+}
+.muted{
+  color:#6b7280;
+}
+.footer{
+  margin-top:10px;
+  font-size:12px;
+  color:#6b7280;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+  <h2>📋 HR 打卡後台</h2>
+
+  <div class="toolbar">
+    <button onclick="exportCSV()">⬇ 匯出 CSV</button>
+    <span class="hint">距離超過 <b id="thTxt">100</b> 公尺會標紅</span>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>工號</th>
+        <th>姓名</th>
+        <th>動作</th>
+        <th>距離 (m)</th>
+        <th>時間</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+
+  <div class="footer">資料來源：Cloudflare Workers KV</div>
+</div>
+
+<script>
+/* ===== HR API（請確認路徑）===== */
+const ADMIN_API = "https://punch-api.jackey1688.workers.dev/api/admin/attendance";
+
+/* ===== 距離門檻（可自行調整）===== */
+const DIST_LIMIT = 100; // 公尺
+
+let DATA = [];
+
+fetch(ADMIN_API)
+  .then(r => r.json())
+  .then(list => {
+    DATA = list || [];
+    render(DATA);
+  })
+  .catch(() => {
+    document.getElementById("tbody").innerHTML =
+      `<tr><td colspan="5" class="muted">無法讀取資料</td></tr>`;
+  });
+
+function render(rows){
+  const tbody = document.getElementById("tbody");
+  tbody.innerHTML = "";
+
+  rows.forEach(r => {
+    const isLeave = r.distance === null;
+    const isBad = !isLeave && r.distance > DIST_LIMIT;
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${r.emp_id}</td>
+      <td>${r.name}</td>
+      <td>${r.action}</td>
+      <td class="${isLeave ? 'muted' : (isBad ? 'bad' : 'ok')}">
+        ${isLeave ? "—" : r.distance}
+      </td>
+      <td>${new Date(r.time).toLocaleString()}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById("thTxt").innerText = DIST_LIMIT;
+}
+
+function exportCSV(){
+  let csv = "工號,姓名,動作,距離(m),時間\n";
+  DATA.forEach(r => {
+    csv += `${r.emp_id},${r.name},${r.action},${r.distance ?? ""},${r.time}\n`;
+  });
+
+  const blob = new Blob([csv], { type:"text/csv;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "attendance.csv";
+  a.click();
+}
+</script>
+</body>
+</html>
