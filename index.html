@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <title>員工打卡</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
   <style>
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont;
@@ -33,7 +32,7 @@
       border-radius: 8px;
       cursor: pointer;
     }
-    #gps, #distance, #result {
+    #gps, #result {
       margin-top: 12px;
       font-size: 14px;
     }
@@ -53,15 +52,110 @@
       <option value="下班">下班</option>
     </select>
 
-    <div id="gps">📡 GPS 取得中…</div>
-    <div id="distance"></div>
+    <div id="gps">GPS 取得中…</div>
 
     <button onclick="punch()">打卡</button>
 
     <div id="result"></div>
   </div>
 
-  <!-- 只載入 work.js -->
-  <script src="work.js"></script>
+<script>
+/* ================= 基本設定 ================= */
+
+// 你的 Cloudflare Worker API
+const API_URL = "https://punch-api.jackey1688.workers.dev/api/punch";
+
+// 公司座標
+const COMPANY_LAT = 25.0066018;
+const COMPANY_LNG = 121.4841673;
+
+let currentLat = null;
+let currentLng = null;
+
+/* ================= 距離計算 ================= */
+function calcDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) *
+    Math.cos(toRad(lat2)) *
+    Math.sin(dLng / 2) ** 2;
+
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+/* ================= 取得 GPS ================= */
+navigator.geolocation.getCurrentPosition(
+  pos => {
+    currentLat = pos.coords.latitude;
+    currentLng = pos.coords.longitude;
+    document.getElementById("gps").innerText =
+      `GPS OK：${currentLat.toFixed(5)}, ${currentLng.toFixed(5)}`;
+  },
+  err => {
+    document.getElementById("gps").innerText = "❌ GPS 取得失敗";
+  },
+  { enableHighAccuracy: true, timeout: 8000 }
+);
+
+/* ================= 打卡 ================= */
+async function punch() {
+  const name = document.getElementById("name").value.trim();
+  const action = document.getElementById("action").value;
+  const result = document.getElementById("result");
+
+  if (!name) {
+    result.innerHTML = `<div class="err">❌ 請輸入姓名</div>`;
+    return;
+  }
+
+  if (currentLat === null || currentLng === null) {
+    result.innerHTML = `<div class="err">❌ GPS 尚未完成定位</div>`;
+    return;
+  }
+
+  const distance = calcDistance(
+    currentLat,
+    currentLng,
+    COMPANY_LAT,
+    COMPANY_LNG
+  );
+
+  result.innerHTML = "送出中…";
+
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        action,
+        lat: currentLat,
+        lng: currentLng,
+        distance,
+        time: new Date().toISOString()
+      })
+    });
+
+    if (!res.ok) throw new Error("API error");
+
+    result.innerHTML = `
+      <div class="ok">✅ 打卡成功</div>
+      姓名：${name}<br>
+      動作：${action}<br>
+      時間：${new Date().toLocaleString()}<br>
+      距離公司：${distance} 公尺
+    `;
+  } catch (e) {
+    console.error(e);
+    result.innerHTML = `<div class="err">❌ 打卡失敗（API 錯誤）</div>`;
+  }
+}
+</script>
 </body>
 </html>
