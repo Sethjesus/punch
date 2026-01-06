@@ -1,101 +1,234 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HR 打卡後台</title>
-<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
 <style>
-body{font-family:sans-serif;background:#f5f6f8}
-.card{background:#fff;padding:20px;border-radius:12px;max-width:1100px;margin:auto}
-table{width:100%;border-collapse:collapse}
-th,td{border-bottom:1px solid #ddd;padding:8px;text-align:center}
-th{background:#f0f0f0}
-.bad{color:red;font-weight:bold}
+body{
+  font-family: system-ui, -apple-system, "Noto Sans TC", sans-serif;
+  background:#f3f4f6;
+}
+.card{
+  max-width:1200px;
+  margin:30px auto;
+  background:#fff;
+  padding:24px;
+  border-radius:16px;
+  box-shadow:0 12px 30px rgba(0,0,0,.12);
+}
+h2{ margin-top:0 }
+.section{
+  margin-top:20px;
+  padding-top:16px;
+  border-top:1px solid #e5e7eb;
+}
+input, button{
+  padding:8px 10px;
+  font-size:14px;
+  margin-right:6px;
+}
+button{
+  cursor:pointer;
+}
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:16px;
+}
+th, td{
+  border-bottom:1px solid #e5e7eb;
+  padding:8px;
+  text-align:center;
+}
+th{
+  background:#f9fafb;
+}
+.msg{
+  font-weight:700;
+  margin-top:8px;
+}
+.ok{ color:#16a34a }
+.err{ color:#dc2626 }
+.footer{
+  text-align:center;
+  font-size:12px;
+  color:#777;
+  margin-top:16px;
+}
 </style>
 </head>
 
 <body>
+
 <div class="card">
-<h2>📋 HR 打卡後台</h2>
+  <h2>👩‍💼 HR 打卡後台</h2>
 
-<button onclick="exportExcel()">⬇ 匯出 Excel</button>
-<select id="weekdayFilter" onchange="render()">
-  <option value="">全部星期</option>
-  <option value="六">六</option>
-  <option value="日">日</option>
-</select>
+  <!-- HR 登入 -->
+  <div>
+    HR PIN：
+    <input id="hrPin" type="password" placeholder="HR PIN">
+    <button onclick="hrLogin()">登入</button>
+    <span id="loginMsg" class="msg"></span>
+  </div>
 
-<table>
-<thead>
-<tr>
-  <th>工號</th><th>姓名</th><th>動作</th>
-  <th>距離(m)</th><th>日期</th><th>星期</th><th>時間</th>
-</tr>
-</thead>
-<tbody id="tbody"></tbody>
-</table>
+  <!-- HR 功能區 -->
+  <div id="hrPanel" style="display:none">
 
-<p style="font-size:12px;color:#888">資料來源：Cloudflare Workers KV</p>
+    <!-- Reset PIN -->
+    <div class="section">
+      <h3>🔐 Reset 員工進入 PIN</h3>
+      新 PIN：
+      <input id="newPin" type="password" placeholder="至少 4 碼">
+      <button onclick="setPin()">設定</button>
+      <span id="pinMsg" class="msg"></span>
+    </div>
+
+    <!-- 查詢 -->
+    <div class="section">
+      <h3>📋 打卡紀錄</h3>
+      <button onclick="loadData()">重新載入</button>
+      <button onclick="exportExcel()">匯出 Excel</button>
+
+      <table>
+        <thead>
+          <tr>
+            <th>姓名</th>
+            <th>動作</th>
+            <th>距離(m)</th>
+            <th>日期</th>
+            <th>星期</th>
+            <th>時間</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="footer">
+    HR 管理後台 · PIN 即時生效
+  </div>
 </div>
 
 <script>
-const API = "https://punch-api.jackey1688.workers.dev/api/admin/attendance";
-let RAW = [];
+const API = "https://你的-worker.workers.dev";
+const HR_PIN = "1234"; // 前端只用來解鎖畫面（真正驗證在後端）
 
-fetch(API).then(r=>r.json()).then(d=>{RAW=d;render();});
+let cache = [];
 
-function weekday(d){
-  return ["日","一","二","三","四","五","六"][new Date(d).getDay()];
+/* -----------------------------
+   HR 登入（前端顯示用）
+----------------------------- */
+function hrLogin(){
+  const pin = document.getElementById("hrPin").value;
+  const msg = document.getElementById("loginMsg");
+
+  if(pin !== HR_PIN){
+    msg.innerText = "❌ HR PIN 錯誤";
+    msg.className = "msg err";
+    return;
+  }
+
+  msg.innerText = "✅ 登入成功";
+  msg.className = "msg ok";
+  document.getElementById("hrPanel").style.display = "block";
+  loadData();
 }
 
-function render(){
-  const f = weekdayFilter.value;
-  tbody.innerHTML = "";
+/* -----------------------------
+   Reset 員工 PIN
+----------------------------- */
+function setPin(){
+  const newPin = document.getElementById("newPin").value;
+  const msg = document.getElementById("pinMsg");
 
-  RAW.filter(r=>{
-    if(!f) return true;
-    const w = weekday(r.time);
-    return f==="六"?w==="六":w==="日";
-  }).forEach(r=>{
+  fetch(API + "/api/hr/set-pin",{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({
+      hr_pin: HR_PIN,
+      new_pin: newPin
+    })
+  })
+  .then(r=>r.json())
+  .then(d=>{
+    if(d.ok){
+      msg.innerText = "✅ 員工進入 PIN 已更新";
+      msg.className = "msg ok";
+    }else{
+      msg.innerText = "❌ " + d.error;
+      msg.className = "msg err";
+    }
+  })
+  .catch(()=>{
+    msg.innerText = "❌ 系統錯誤";
+    msg.className = "msg err";
+  });
+}
+
+/* -----------------------------
+   讀取打卡資料
+----------------------------- */
+function loadData(){
+  fetch(API + "/api/admin/attendance")
+    .then(r=>r.json())
+    .then(data=>{
+      cache = data;
+      render(data);
+    });
+}
+
+/* -----------------------------
+   畫表格
+----------------------------- */
+function render(data){
+  const tb = document.getElementById("tbody");
+  tb.innerHTML = "";
+
+  data.forEach(r=>{
     const d = new Date(r.time);
-    const w = weekday(r.time);
-    const bad = r.distance>100 ? "bad":"";
+    const week = ["日","一","二","三","四","五","六"][d.getDay()];
 
-    tbody.innerHTML += `
+    tb.innerHTML += `
       <tr>
-        <td>${r.emp_id}</td>
         <td>${r.name}</td>
         <td>${r.action}</td>
-        <td class="${bad}">${r.distance ?? ""}</td>
-        <td>${d.toISOString().slice(0,10)}</td>
-        <td>${w}</td>
+        <td>${r.distance ?? ""}</td>
+        <td>${d.toLocaleDateString()}</td>
+        <td>星期${week}</td>
         <td>${d.toLocaleTimeString()}</td>
-      </tr>`;
+      </tr>
+    `;
   });
 }
 
+/* -----------------------------
+   匯出 Excel（.xls）
+----------------------------- */
 function exportExcel(){
-  const rows = RAW.map(r=>{
-    const d=new Date(r.time);
-    const w=weekday(r.time);
-    return {
-      工號:r.emp_id,
-      姓名:r.name,
-      動作:r.action,
-      距離:r.distance,
-      日期:d.toISOString().slice(0,10),
-      星期:w,
-      是否週末:(w==="六"||w==="日"),
-      時間:d.toLocaleTimeString()
-    };
+  let xls = "姓名\t動作\t距離(m)\t日期\t星期\t時間\n";
+
+  cache.forEach(r=>{
+    const d = new Date(r.time);
+    xls += [
+      r.name,
+      r.action,
+      r.distance ?? "",
+      d.toLocaleDateString(),
+      "星期" + ["日","一","二","三","四","五","六"][d.getDay()],
+      d.toLocaleTimeString()
+    ].join("\t") + "\n";
   });
 
-  const ws=XLSX.utils.json_to_sheet(rows);
-  ws["H2"]={f:'=IF(E2>=100,TRUE,FALSE)'}; // 範例公式
-  const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,"HR");
-  XLSX.writeFile(wb,"attendance.xlsx");
+  const blob = new Blob([xls],{ type:"application/vnd.ms-excel" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "attendance.xls";
+  a.click();
 }
 </script>
+
 </body>
 </html>
