@@ -1,158 +1,110 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="UTF-8">
   <title>員工打卡</title>
-
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-        Arial, sans-serif;
-      background: #f5f6f7;
-      margin: 0;
-      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont;
+      background: #f5f5f5;
     }
-
     .card {
       max-width: 420px;
       margin: 40px auto;
-      background: #fff;
-      padding: 24px;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      padding: 20px;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,.1);
     }
-
-    h1 {
-      margin-top: 0;
-      margin-bottom: 16px;
-      font-size: 24px;
-    }
-
     input, select, button {
       width: 100%;
       padding: 12px;
+      margin-top: 10px;
       font-size: 16px;
-      margin-top: 12px;
-      box-sizing: border-box;
     }
-
     button {
-      background: #3b82f6;
+      background: #1e88e5;
       color: white;
       border: none;
       border-radius: 6px;
-      cursor: pointer;
     }
-
-    button:disabled {
-      background: #9ca3af;
-    }
-
-    #gps {
-      margin-top: 10px;
-      font-size: 14px;
-      color: #374151;
-    }
-
-    #result {
-      margin-top: 16px;
-      white-space: pre-wrap;
-      font-size: 14px;
+    .status {
+      margin-top: 15px;
+      white-space: pre-line;
     }
   </style>
 </head>
 <body>
 
-  <div class="card">
-    <h1>員工打卡</h1>
+<div class="card">
+  <h2>員工打卡</h2>
 
-    <input id="emp" placeholder="請輸入姓名" />
+  <input id="name" placeholder="姓名">
 
-    <select id="act">
-      <option value="">請選擇</option>
-      <option value="上班">上班</option>
-      <option value="下班">下班</option>
-    </select>
+  <select id="action">
+    <option value="上班">上班</option>
+    <option value="下班">下班</option>
+  </select>
 
-    <div id="gps">GPS 讀取中…</div>
+  <div id="gps">GPS 取得中…</div>
 
-    <button id="btn" onclick="punch()">打卡</button>
+  <button onclick="punch()">打卡</button>
 
-    <pre id="result"></pre>
-  </div>
+  <div id="result" class="status"></div>
+</div>
 
 <script>
-/* ===== 設定你的 Workers API（一定要對） ===== */
-const API = "https://punch-api.jackey1688.workers.dev";
-
-/* ===== DOM ===== */
-const emp = document.getElementById("emp");
-const act = document.getElementById("act");
-const gps = document.getElementById("gps");
-const btn = document.getElementById("btn");
-const result = document.getElementById("result");
-
-/* ===== GPS ===== */
 let lat = null;
 let lng = null;
 
-navigator.geolocation.getCurrentPosition(
-  pos => {
-    lat = pos.coords.latitude;
-    lng = pos.coords.longitude;
-    gps.innerText = `GPS OK : ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  },
-  err => {
-    gps.innerText = "GPS 失敗（仍可打卡）";
-  },
-  { enableHighAccuracy: true, timeout: 8000 }
-);
+if (navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      lat = pos.coords.latitude;
+      lng = pos.coords.longitude;
+      document.getElementById('gps').innerText =
+        `GPS OK：${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    },
+    () => {
+      document.getElementById('gps').innerText =
+        'GPS 失敗（仍可打卡）';
+    }
+  );
+}
 
-/* ===== 打卡 ===== */
 async function punch() {
-  result.innerText = "送出中…";
-  btn.disabled = true;
+  const name = document.getElementById('name').value.trim();
+  const action = document.getElementById('action').value;
 
-  const name = emp.value.trim();
-  const action = act.value;
-
-  if (!name || !action) {
-    result.innerText = "❌ 請輸入姓名並選擇上 / 下班";
-    btn.disabled = false;
+  if (!name) {
+    alert('請輸入姓名');
     return;
   }
 
-  try {
-    const r = await fetch(API + "/punch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        action,
-        lat,
-        lng
-      })
-    });
+  document.getElementById('result').innerText = '送出中…';
 
-    const j = await r.json();   // ⭐ 一定要讀完
+  const res = await fetch('https://punch-api.jackey1688.workers.dev', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name,
+      action,
+      lat,
+      lng,
+      distance: null
+    })
+  });
 
-    if (j.ok) {
-      result.innerText =
-        "✅ 打卡成功\n" +
-        "姓名：" + name + "\n" +
-        "動作：" + action + "\n" +
-        "時間：" + new Date(j.time).toLocaleString() + "\n" +
-        "距離：" + (j.distance ?? "N/A") + " m";
-    } else {
-      result.innerText = "❌ 失敗：" + j.error;
-    }
+  const data = await res.json();
 
-  } catch (e) {
-    result.innerText = "❌ API 錯誤：" + e.message;
+  if (data.ok) {
+    document.getElementById('result').innerText =
+      `✅ 打卡成功\n姓名：${data.name}\n動作：${data.action}\n時間：${data.time}`;
+  } else {
+    document.getElementById('result').innerText =
+      `❌ 失敗：${data.error}`;
   }
-
-  btn.disabled = false;
 }
 </script>
 
