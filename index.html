@@ -1,22 +1,25 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>員工打卡</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
   <style>
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont;
-      background: #f5f5f5;
+      background: #f2f4f7;
+      padding: 20px;
     }
     .card {
       max-width: 420px;
-      margin: 40px auto;
+      margin: auto;
+      background: #fff;
       padding: 20px;
-      background: white;
-      border-radius: 10px;
-      box-shadow: 0 4px 10px rgba(0,0,0,.1);
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0,0,0,.08);
     }
+    h2 { text-align: center; }
     input, select, button {
       width: 100%;
       padding: 12px;
@@ -24,89 +27,41 @@
       font-size: 16px;
     }
     button {
-      background: #1e88e5;
-      color: white;
+      background: #3b82f6;
+      color: #fff;
       border: none;
-      border-radius: 6px;
+      border-radius: 8px;
+      cursor: pointer;
     }
-    .status {
-      margin-top: 15px;
-      white-space: pre-line;
+    #gps, #distance, #result {
+      margin-top: 12px;
+      font-size: 14px;
     }
+    .ok { color: green; }
+    .err { color: red; }
   </style>
 </head>
+
 <body>
+  <div class="card">
+    <h2>員工打卡</h2>
 
-<div class="card">
-  <h2>員工打卡</h2>
+    <input id="name" placeholder="請輸入姓名" />
 
-  <input id="name" placeholder="姓名">
+    <select id="action">
+      <option value="上班">上班</option>
+      <option value="下班">下班</option>
+    </select>
 
-  <select id="action">
-    <option value="上班">上班</option>
-    <option value="下班">下班</option>
-  </select>
+    <div id="gps">📡 GPS 取得中…</div>
+    <div id="distance"></div>
 
-  <div id="gps">GPS 取得中…</div>
+    <button onclick="punch()">打卡</button>
 
-  <button onclick="punch()">打卡</button>
+    <div id="result"></div>
+  </div>
 
-  <div id="result" class="status"></div>
-</div>
-
-<script>
-let lat = null;
-let lng = null;
-
-if (navigator.geolocation) {
-  navigator.geolocation.getCurrentPosition(
-    pos => {
-      lat = pos.coords.latitude;
-      lng = pos.coords.longitude;
-      document.getElementById('gps').innerText =
-        `GPS OK：${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-    },
-    () => {
-      document.getElementById('gps').innerText =
-        'GPS 失敗（仍可打卡）';
-    }
-  );
-}
-
-async function punch() {
-  const name = document.getElementById('name').value.trim();
-  const action = document.getElementById('action').value;
-
-  if (!name) {
-    alert('請輸入姓名');
-    return;
-  }
-
-  document.getElementById('result').innerText = '送出中…';
-
-  const res = await fetch('https://punch-api.jackey1688.workers.dev', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name,
-      action,
-      lat,
-      lng,
-      distance: null
-    })
-  });
-
-  const data = await res.json();
-
-  if (data.ok) {
-    document.getElementById('result').innerText =
-      `✅ 打卡成功\n姓名：${data.name}\n動作：${data.action}\n時間：${data.time}`;
-  } else {
-    document.getElementById('result').innerText =
-      `❌ 失敗：${data.error}`;
-  }
-}
-</script>
-
+  <!-- 只載入 work.js -->
+  <script src="work.js"></script>
 </body>
 </html>
