@@ -1,118 +1,107 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8" />
-  <title>公司打卡系統</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont;
-      background: #f2f4f8;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-    }
-    .card {
-      background: #fff;
-      padding: 24px;
-      border-radius: 12px;
-      width: 320px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.1);
-    }
-    h2 {
-      text-align: center;
-      margin-bottom: 16px;
-    }
-    input, button {
-      width: 100%;
-      padding: 10px;
-      margin-bottom: 10px;
-      font-size: 16px;
-    }
-    button {
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-    .in { background: #3b82f6; color: #fff; }
-    .out { background: #16a34a; color: #fff; }
-    .leave { background: #444; color: #fff; }
-    .msg {
-      text-align: center;
-      margin-top: 10px;
-      font-size: 14px;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>員工打卡</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:system-ui;background:#f4f6f8}
+.card{max-width:420px;margin:40px auto;background:#fff;padding:20px;border-radius:8px}
+input,select,button{width:100%;padding:10px;margin:6px 0}
+button{background:#1e88e5;color:#fff;border:none;border-radius:4px;font-size:16px}
+#result{margin-top:12px;font-weight:bold}
+.ok{color:green}
+.bad{color:red}
+.gray{color:#666}
+</style>
 </head>
 <body>
 
 <div class="card">
-  <h2>📍 公司打卡</h2>
+  <h2>員工打卡</h2>
 
-  <input id="name" placeholder="姓名" />
-  <input id="pin" type="password" placeholder="PIN" />
+  <input id="name" placeholder="請輸入姓名">
+  <select id="action">
+    <option value="in">上班</option>
+    <option value="out">下班</option>
+  </select>
 
-  <button class="in" onclick="punch('上班')">🕘 上班</button>
-  <button class="out" onclick="punch('下班')">🕕 下班</button>
-  <button class="leave" onclick="punch('請假')">🏖️ 請假</button>
+  <div id="gps" class="gray">GPS 取得中…</div>
 
-  <div id="msg" class="msg"></div>
+  <button onclick="punch()">打卡</button>
+
+  <div id="result"></div>
 </div>
 
 <script>
-const API_BASE = "https://punch-api.jackey1688.workers.dev";
+const API = "https://punch-api.jackey1688.workers.dev";
+let lat=null, lng=null;
 
-function punch(action) {
-  const name = document.getElementById("name").value.trim();
-  const pin = document.getElementById("pin").value.trim();
-  const msg = document.getElementById("msg");
-
-  if (!name || !pin) {
-    msg.innerText = "❌ 請輸入姓名與 PIN";
-    return;
-  }
-
-  msg.innerText = "定位中…";
-
-  if (action === "請假") {
-    sendPunch({ name, pin, action });
-    return;
-  }
-
+/* 取得 GPS */
+if (navigator.geolocation) {
   navigator.geolocation.getCurrentPosition(
-    pos => {
-      sendPunch({
-        name,
-        pin,
-        action,
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude
-      });
+    p=>{
+      lat=p.coords.latitude;
+      lng=p.coords.longitude;
+      gps.innerText=`GPS OK：${lat.toFixed(5)}, ${lng.toFixed(5)}`;
     },
-    err => {
-      msg.innerText = "❌ 無法取得定位";
+    ()=>{
+      gps.innerText="GPS 失敗（仍可打卡）";
     }
   );
+}else{
+  gps.innerText="裝置不支援 GPS";
 }
 
-function sendPunch(data) {
-  fetch(API_BASE + "/api/punch", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
-  })
-  .then(r => r.json())
-  .then(res => {
-    if (res.ok) {
-      document.getElementById("msg").innerText = "✅ 打卡成功";
-    } else {
-      document.getElementById("msg").innerText = "❌ " + (res.error || "失敗");
+/* 打卡 */
+async function punch(){
+  result.innerText="送出中…";
+  result.className="gray";
+
+  const payload={
+    name: name.value.trim(),
+    action: action.value,
+    lat, lng
+  };
+
+  try{
+    const r = await fetch(API+"/api/punch",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload)
+    });
+
+    const j = await r.json();
+
+    if(!j.ok){
+      result.innerText="❌ 失敗："+j.error;
+      result.className="bad";
+      return;
     }
-  })
-  .catch(() => {
-    document.getElementById("msg").innerText = "❌ API 連線失敗";
-  });
+
+    /* === A：一定顯示成功 === */
+    let msg = `✅ 打卡成功\n🕒 ${new Date(j.time).toLocaleString()}`;
+
+    /* === C：距離判斷 === */
+    if(j.distance == null){
+      msg += `\n⚠ GPS 無資料`;
+      result.className="bad";
+    }else{
+      msg += `\n📍 距離公司 ${j.distance} 公尺`;
+      if(j.max && j.distance > j.max){
+        msg += `\n🚨 超出允許距離`;
+        result.className="bad";
+      }else{
+        result.className="ok";
+      }
+    }
+
+    result.innerText = msg;
+
+  }catch(e){
+    result.innerText="❌ 連線失敗";
+    result.className="bad";
+  }
 }
 </script>
 
