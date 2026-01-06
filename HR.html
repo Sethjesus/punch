@@ -1,234 +1,128 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8" />
 <title>HR 打卡後台</title>
-
 <style>
-body{
-  font-family: system-ui, -apple-system, "Noto Sans TC", sans-serif;
-  background:#f3f4f6;
-}
-.card{
-  max-width:1200px;
-  margin:30px auto;
-  background:#fff;
-  padding:24px;
-  border-radius:16px;
-  box-shadow:0 12px 30px rgba(0,0,0,.12);
-}
-h2{ margin-top:0 }
-.section{
-  margin-top:20px;
-  padding-top:16px;
-  border-top:1px solid #e5e7eb;
-}
-input, button{
-  padding:8px 10px;
-  font-size:14px;
-  margin-right:6px;
-}
-button{
-  cursor:pointer;
-}
-table{
-  width:100%;
-  border-collapse:collapse;
-  margin-top:16px;
-}
-th, td{
-  border-bottom:1px solid #e5e7eb;
-  padding:8px;
-  text-align:center;
-}
-th{
-  background:#f9fafb;
-}
-.msg{
-  font-weight:700;
-  margin-top:8px;
-}
-.ok{ color:#16a34a }
-.err{ color:#dc2626 }
-.footer{
-  text-align:center;
-  font-size:12px;
-  color:#777;
-  margin-top:16px;
-}
+body{font-family:system-ui;background:#f4f6f8}
+.card{max-width:960px;margin:30px auto;background:#fff;padding:24px;border-radius:16px}
+input,button{padding:10px;font-size:16px}
+button{cursor:pointer}
+table{width:100%;border-collapse:collapse;margin-top:20px}
+th,td{border-bottom:1px solid #ddd;padding:8px;text-align:center}
+.msg-ok{color:green;font-weight:bold}
+.msg-err{color:red;font-weight:bold}
 </style>
 </head>
-
 <body>
 
 <div class="card">
-  <h2>👩‍💼 HR 打卡後台</h2>
+<h2>🧑‍💼 HR 打卡後台</h2>
 
-  <!-- HR 登入 -->
-  <div>
-    HR PIN：
-    <input id="hrPin" type="password" placeholder="HR PIN">
-    <button onclick="hrLogin()">登入</button>
-    <span id="loginMsg" class="msg"></span>
-  </div>
+<!-- HR 登入 -->
+<div>
+  HR PIN：
+  <input id="hrPin" type="password">
+  <button onclick="login()">登入</button>
+  <span id="loginMsg"></span>
+</div>
 
-  <!-- HR 功能區 -->
-  <div id="hrPanel" style="display:none">
+<hr>
 
-    <!-- Reset PIN -->
-    <div class="section">
-      <h3>🔐 Reset 員工進入 PIN</h3>
-      新 PIN：
-      <input id="newPin" type="password" placeholder="至少 4 碼">
-      <button onclick="setPin()">設定</button>
-      <span id="pinMsg" class="msg"></span>
-    </div>
+<!-- Reset PIN -->
+<div>
+  🔐 Reset 員工進入 PIN：
+  <input id="newPin" type="password" placeholder="新 PIN">
+  <button onclick="setPin()">設定</button>
+  <span id="pinMsg"></span>
+</div>
 
-    <!-- 查詢 -->
-    <div class="section">
-      <h3>📋 打卡紀錄</h3>
-      <button onclick="loadData()">重新載入</button>
-      <button onclick="exportExcel()">匯出 Excel</button>
+<hr>
 
-      <table>
-        <thead>
-          <tr>
-            <th>姓名</th>
-            <th>動作</th>
-            <th>距離(m)</th>
-            <th>日期</th>
-            <th>星期</th>
-            <th>時間</th>
-          </tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-      </table>
-    </div>
-  </div>
+<button onclick="loadData()">重新載入</button>
+<button onclick="exportExcel()">匯出 Excel</button>
 
-  <div class="footer">
-    HR 管理後台 · PIN 即時生效
-  </div>
+<table>
+<thead>
+<tr>
+  <th>姓名</th>
+  <th>動作</th>
+  <th>距離(m)</th>
+  <th>日期</th>
+  <th>星期</th>
+  <th>時間</th>
+</tr>
+</thead>
+<tbody id="tbody"></tbody>
+</table>
+
 </div>
 
 <script>
-const API = "https://你的-worker.workers.dev";
-const HR_PIN = "1234"; // 前端只用來解鎖畫面（真正驗證在後端）
+const API = "https://punch-api.jackey1688.workers.dev";
+let loggedIn = false;
 
-let cache = [];
-
-/* -----------------------------
-   HR 登入（前端顯示用）
------------------------------ */
-function hrLogin(){
-  const pin = document.getElementById("hrPin").value;
-  const msg = document.getElementById("loginMsg");
-
-  if(pin !== HR_PIN){
-    msg.innerText = "❌ HR PIN 錯誤";
-    msg.className = "msg err";
-    return;
+function login(){
+  if(document.getElementById("hrPin").value === "1234"){
+    loggedIn = true;
+    loginMsg.innerHTML = "✅ 登入成功";
+    loginMsg.className = "msg-ok";
+    loadData();
+  }else{
+    loginMsg.innerHTML = "❌ PIN 錯誤";
+    loginMsg.className = "msg-err";
   }
-
-  msg.innerText = "✅ 登入成功";
-  msg.className = "msg ok";
-  document.getElementById("hrPanel").style.display = "block";
-  loadData();
 }
 
-/* -----------------------------
-   Reset 員工 PIN
------------------------------ */
-function setPin(){
-  const newPin = document.getElementById("newPin").value;
-  const msg = document.getElementById("pinMsg");
+async function setPin(){
+  if(!loggedIn) return alert("請先登入");
 
-  fetch(API + "/api/hr/set-pin",{
+  const res = await fetch(API + "/api/hr/set-pin",{
     method:"POST",
     headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({
-      hr_pin: HR_PIN,
-      new_pin: newPin
+    body:JSON.stringify({
+      hr_pin: document.getElementById("hrPin").value,
+      new_pin: document.getElementById("newPin").value
     })
-  })
-  .then(r=>r.json())
-  .then(d=>{
-    if(d.ok){
-      msg.innerText = "✅ 員工進入 PIN 已更新";
-      msg.className = "msg ok";
-    }else{
-      msg.innerText = "❌ " + d.error;
-      msg.className = "msg err";
-    }
-  })
-  .catch(()=>{
-    msg.innerText = "❌ 系統錯誤";
-    msg.className = "msg err";
   });
+
+  const r = await res.json();
+  pinMsg.innerHTML = r.ok ? "✅ 設定成功" : "❌ 系統錯誤";
+  pinMsg.className = r.ok ? "msg-ok" : "msg-err";
 }
 
-/* -----------------------------
-   讀取打卡資料
------------------------------ */
-function loadData(){
-  fetch(API + "/api/admin/attendance")
-    .then(r=>r.json())
-    .then(data=>{
-      cache = data;
-      render(data);
-    });
-}
-
-/* -----------------------------
-   畫表格
------------------------------ */
-function render(data){
+async function loadData(){
+  const res = await fetch(API + "/api/admin/attendance");
+  const data = await res.json();
   const tb = document.getElementById("tbody");
   tb.innerHTML = "";
 
-  data.forEach(r=>{
-    const d = new Date(r.time);
-    const week = ["日","一","二","三","四","五","六"][d.getDay()];
-
+  data.forEach(d=>{
+    const dt = new Date(d.time);
+    const week = ["日","一","二","三","四","五","六"][dt.getDay()];
     tb.innerHTML += `
       <tr>
-        <td>${r.name}</td>
-        <td>${r.action}</td>
-        <td>${r.distance ?? ""}</td>
-        <td>${d.toLocaleDateString()}</td>
-        <td>星期${week}</td>
-        <td>${d.toLocaleTimeString()}</td>
-      </tr>
-    `;
+        <td>${d.name}</td>
+        <td>${d.action}</td>
+        <td>${d.distance ?? ""}</td>
+        <td>${dt.toLocaleDateString()}</td>
+        <td>週${week}</td>
+        <td>${dt.toLocaleTimeString()}</td>
+      </tr>`;
   });
 }
 
-/* -----------------------------
-   匯出 Excel（.xls）
------------------------------ */
 function exportExcel(){
-  let xls = "姓名\t動作\t距離(m)\t日期\t星期\t時間\n";
-
-  cache.forEach(r=>{
-    const d = new Date(r.time);
-    xls += [
-      r.name,
-      r.action,
-      r.distance ?? "",
-      d.toLocaleDateString(),
-      "星期" + ["日","一","二","三","四","五","六"][d.getDay()],
-      d.toLocaleTimeString()
-    ].join("\t") + "\n";
+  let csv = "姓名,動作,距離,日期,星期,時間\n";
+  document.querySelectorAll("#tbody tr").forEach(r=>{
+    csv += [...r.children].map(td=>td.innerText).join(",") + "\n";
   });
-
-  const blob = new Blob([xls],{ type:"application/vnd.ms-excel" });
+  const blob = new Blob(["\uFEFF"+csv],{type:"text/csv"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "attendance.xls";
+  a.download = "attendance.xlsx";
   a.click();
 }
 </script>
-
 </body>
 </html>
