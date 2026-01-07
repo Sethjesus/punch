@@ -1,74 +1,26 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-<meta charset="utf-8" />
-<title>員工打卡</title>
-</head>
+<!DOCTYPE html><html lang="zh-TW"><head>
+<meta charset="utf-8"><title>員工打卡</title></head>
 <body>
-
-<h2>員工打卡</h2>
-
-姓名：
-<input id="name" value="廖志豪"><br><br>
-
-動作：
-<select id="action">
-  <option>上班</option>
-  <option>下班</option>
-  <option>出差</option>
-</select><br><br>
-
-出差地點：
-<input id="place" placeholder="僅出差填寫"><br><br>
-
-<div id="gps">GPS：尚未取得</div><br>
-
+姓名 <input id="name">
+<select id="type">
+  <option>上班</option><option>下班</option><option>出差</option>
+</select>
 <button onclick="punch()">打卡</button>
-
-<hr>
-<h3>DEBUG</h3>
 <pre id="debug"></pre>
 
 <script>
-const API = "https://punch-api.jackey1688.workers.dev";
-
-let lat = null, lng = null;
-
-navigator.geolocation.getCurrentPosition(
-  p => {
-    lat = p.coords.latitude;
-    lng = p.coords.longitude;
-    gps.innerText = `GPS OK：${lat}, ${lng}`;
-  },
-  e => gps.innerText = "GPS 失敗：" + e.message
-);
-
-async function punch() {
-  debug.textContent = "STEP 1: 準備送出";
-
-  const body = {
-    name: name.value,
-    action: action.value,
-    place: place.value,
-    lat, lng
+const API="https://punch-api.jackey1688.workers.dev";
+async function punch(){
+  const pos=await new Promise((r,j)=>navigator.geolocation.getCurrentPosition(r,j));
+  const p={
+    name:name.value,
+    type:type.value,
+    lat:pos.coords.latitude,
+    lng:pos.coords.longitude
   };
-
-  debug.textContent += "\nSTEP 2: " + JSON.stringify(body, null, 2);
-
-  try {
-    const res = await fetch(API + "/api/punch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    });
-
-    const json = await res.json();
-    debug.textContent += "\nSTEP 3: 回傳\n" + JSON.stringify(json, null, 2);
-  } catch (e) {
-    debug.textContent += "\nERROR: " + e.message;
-  }
+  debug.textContent=JSON.stringify(p,null,2);
+  await fetch(API+"/api/punch",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
+  alert("完成");
 }
 </script>
-
-</body>
-</html>
+</body></html>
