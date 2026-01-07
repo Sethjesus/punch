@@ -1,37 +1,62 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>HR 打卡紀錄</title>
-  <script defer src="work.js"></script>
-  <style>
-    body { font-family: system-ui; background:#f5f6f8 }
-    table { width:100%; border-collapse:collapse; background:#fff }
-    th, td { padding:10px; border:1px solid #ddd; text-align:center }
-    th { background:#f0f0f0 }
-  </style>
+<meta charset="UTF-8">
+<title>HR 打卡紀錄</title>
+<style>
+body{font-family:Arial;padding:20px}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ccc;padding:8px;text-align:center}
+th{background:#f4f4f4}
+.pass{color:green;font-weight:bold}
+.fail{color:red;font-weight:bold}
+</style>
 </head>
-<body onload="loadHR()">
+<body>
 
 <h2>HR 打卡紀錄</h2>
-
-<div id="office"></div>
+<button onclick="load()">重新整理</button>
 
 <table>
-  <thead>
-    <tr>
-      <th>姓名</th>
-      <th>動作</th>
-      <th>時間</th>
-      <th>緯度</th>
-      <th>經度</th>
-      <th>距離(m)</th>
-      <th>是否合格</th>
-    </tr>
-  </thead>
-  <tbody id="rows"></tbody>
+<thead>
+<tr>
+<th>姓名</th>
+<th>動作</th>
+<th>時間</th>
+<th>緯度</th>
+<th>經度</th>
+<th>距離(m)</th>
+<th>是否合格</th>
+</tr>
+</thead>
+<tbody id="rows"></tbody>
 </table>
+
+<script>
+const API = "https://punch-api.jackey1688.workers.dev/api/records";
+
+async function load(){
+  const res = await fetch(API);
+  const data = await res.json();
+  rows.innerHTML = "";
+
+  data.forEach(r=>{
+    rows.innerHTML += `
+      <tr>
+        <td>${r.name}</td>
+        <td>${r.action}</td>
+        <td>${new Date(r.time).toLocaleString()}</td>
+        <td>${r.lat ?? ""}</td>
+        <td>${r.lng ?? ""}</td>
+        <td>${r.distance ?? ""}</td>
+        <td class="${r.pass?'pass':'fail'}">
+          ${r.pass?'合格':'不合格'}
+        </td>
+      </tr>`;
+  });
+}
+load();
+</script>
 
 </body>
 </html>
