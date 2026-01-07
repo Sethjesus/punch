@@ -1,85 +1,87 @@
-<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8"><title>HR</title>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>HR 打卡紀錄（Debug）</title>
 <style>
-table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:6px;text-align:center}
-.bad{color:red;font-weight:bold}
-</style></head>
+body { font-family: Arial; padding:20px; }
+table { border-collapse:collapse; width:100%; }
+th,td { border:1px solid #ccc; padding:6px; text-align:center; }
+th { background:#eee; }
+#debug {
+  background:#000;
+  color:#0f0;
+  padding:10px;
+  margin-bottom:10px;
+  white-space:pre-wrap;
+  font-size:13px;
+}
+</style>
+</head>
 <body>
 
-<h2>HR 打卡紀錄</h2>
-<table><thead><tr><th>姓名</th><th>動作</th><th>時間</th><th>距離</th><th>合格</th></tr></thead>
-<tbody id="rows"></tbody></table>
+<h2>HR 打卡紀錄（Debug 模式）</h2>
 
-<h3>請假審核</h3>
-<button onclick="batch('核准')">批次核准</button>
-<button onclick="batch('駁回')">批次駁回</button>
-<table><thead><tr><th><input type="checkbox" onclick="tog(this)"></th>
-<th>姓名</th><th>類型</th><th>半天</th><th>AM/PM</th><th>狀態</th></tr></thead>
-<tbody id="leaveRows"></tbody></table>
+<div id="debug">[DEBUG START]</div>
 
-<h3>月報</h3>
-<input type="month" id="month">
-<button onclick="monthly()">產生</button>
-<button onclick="exportX()">匯出 Excel</button>
-<table><thead><tr><th>姓名</th><th>出勤天</th><th>請假天</th><th>工時</th><th>異常</th></tr></thead>
-<tbody id="mrows"></tbody></table>
+<table>
+<thead>
+<tr>
+  <th>姓名</th>
+  <th>動作</th>
+  <th>時間</th>
+  <th>緯度</th>
+  <th>經度</th>
+  <th>距離</th>
+</tr>
+</thead>
+<tbody id="rows"></tbody>
+</table>
 
 <script>
-const API="https://punch-api.jackey1688.workers.dev";
-let mdata=[];
+const API = "https://punch-api.jackey1688.workers.dev";
+
+function log(msg){
+  document.getElementById("debug").textContent += "\n" + msg;
+}
 
 async function load(){
-  const r=await (await fetch(API+"/api/records")).json();
-  rows.innerHTML="";
-  r.forEach(x=>rows.innerHTML+=`<tr><td>${x.name}</td><td>${x.action}</td>
-    <td>${new Date(x.time).toLocaleString()}</td><td>${x.distance??""}</td>
-    <td>${x.valid?"✔":"✖"}</td></tr>`);
+  log("準備 fetch: " + API + "/api/records");
+
+  try{
+    const res = await fetch(API + "/api/records");
+    log("HTTP status = " + res.status);
+
+    const text = await res.text();
+    log("RAW RESPONSE:");
+    log(text.substring(0,500));
+
+    const data = JSON.parse(text);
+    log("JSON parsed, 筆數 = " + data.length);
+
+    const rows = document.getElementById("rows");
+    rows.innerHTML = "";
+
+    data.forEach(r=>{
+      rows.innerHTML += `
+        <tr>
+          <td>${r.name || ""}</td>
+          <td>${r.action || ""}</td>
+          <td>${r.time}</td>
+          <td>${r.lat ?? ""}</td>
+          <td>${r.lng ?? ""}</td>
+          <td>${r.distance ?? ""}</td>
+        </tr>`;
+    });
+
+  }catch(e){
+    log("❌ FETCH ERROR");
+    log(e.toString());
+  }
 }
-async function loadLeave(){
-  const l=await (await fetch(API+"/api/leave/list")).json();
-  leaveRows.innerHTML="";
-  l.forEach(x=>leaveRows.innerHTML+=`<tr>
-    <td><input class="chk" value="${x.id}" type="checkbox"></td>
-    <td>${x.name}</td><td>${x.type}</td><td>${x.halfDay?"0.5":"1"}</td>
-    <td>${x.period||""}</td><td>${x.status}</td></tr>`);
-}
-function tog(m){document.querySelectorAll(".chk").forEach(c=>c.checked=m.checked)}
-async function batch(s){
-  const ids=[...document.querySelectorAll(".chk:checked")].map(c=>c.value);
-  if(!ids.length) return alert("未選");
-  await fetch(API+"/api/leave/batch",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({ids,status:s})});
-  loadLeave();
-}
-async function monthly(){
-  const m=month.value; if(!m) return;
-  const rec=await (await fetch(API+"/api/records")).json();
-  const lea=(await (await fetch(API+"/api/leave/list")).json()).filter(x=>x.status==="核准");
-  const L={}; lea.forEach(x=>{(L[x.name]=L[x.name]||[]).push(x)});
-  const W={};
-  rec.forEach(x=>{
-    const d=new Date(x.time); if(d.toISOString().slice(0,7)!==m) return;
-    W[x.name]=W[x.name]||{days:new Set(),h:0,in:null,ab:false};
-    if(x.action==="上班"){W[x.name].in=d;W[x.name].days.add(d.toDateString())}
-    if(x.action==="下班"&&W[x.name].in){
-      const h=(d-W[x.name].in)/36e5; W[x.name].h+=h;
-      if(h<4||h>12) W[x.name].ab=true; W[x.name].in=null;
-    }
-  });
-  mdata=[]; mrows.innerHTML="";
-  Object.entries(W).forEach(([n,v])=>{
-    let ld=0; (L[n]||[]).forEach(x=>{ld+=x.halfDay?0.5:((new Date(x.end)-new Date(x.start))/864e5+1);
-      if(x.halfDay){v.h-=4; if(v.h>=8) v.ab=true}});
-    mdata.push({姓名:n,出勤天:Math.max(v.days.size-ld,0),請假天:ld,工時:v.h.toFixed(2),異常:v.ab?"❗":""});
-    mrows.innerHTML+=`<tr><td>${n}</td><td>${Math.max(v.days.size-ld,0)}</td>
-      <td>${ld}</td><td>${v.h.toFixed(2)}</td><td class="bad">${v.ab?"❗":""}</td></tr>`;
-  });
-}
-function exportX(){
-  const ws=XLSX.utils.json_to_sheet(mdata);
-  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"月報");
-  XLSX.writeFile(wb,"月報_"+month.value+".xlsx");
-}
-load(); loadLeave();
+
+load();
 </script>
-</body></html>
+
+</body>
+</html>

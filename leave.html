@@ -1,20 +1,40 @@
-<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8"><title>請假</title></head>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>請假系統（Debug）</title>
+</head>
 <body>
-<h2>請假申請</h2>
-<input id="name" placeholder="姓名">
-<select id="type"><option>事假</option><option>病假</option><option>特休</option></select>
-<label><input type="checkbox" id="halfDay" onchange="period.disabled=!this.checked"> 半天</label>
-<select id="period" disabled><option value="AM">上午</option><option value="PM">下午</option></select>
-<input type="date" id="start"><input type="date" id="end">
-<button onclick="apply()">送出</button>
+
+<h2>請假申請（半天 / 全天）</h2>
+
+<div id="debug"></div>
+
+<form>
+  姓名：
+  <input id="name"><br><br>
+
+  類型：
+  <select id="type">
+    <option>半天</option>
+    <option>全天</option>
+  </select><br><br>
+
+  原因：
+  <input id="reason"><br><br>
+
+  <button type="button" onclick="submitLeave()">送出</button>
+</form>
+
 <script>
-async function apply(){
-  await fetch("https://punch-api.jackey1688.workers.dev/api/leave/apply",{
-    method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({name:name.value,type:type.value,start:start.value,end:end.value,
-      halfDay:halfDay.checked,period:halfDay.checked?period.value:""})
-  });
-  alert("已送出");
+function log(m){
+  document.getElementById("debug").innerText += "\n" + m;
+}
+
+function submitLeave(){
+  log("點擊送出（目前僅 debug，尚未接 API）");
 }
 </script>
-</body></html>
+
+</body>
+</html>
