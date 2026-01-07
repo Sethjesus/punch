@@ -1,122 +1,59 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta charset="UTF-8">
 <title>員工打卡</title>
-
 <style>
-body {
-  font-family: Arial, sans-serif;
-  background: #f5f6f8;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-}
-.card {
-  background: #fff;
-  padding: 24px;
-  width: 320px;
-  border-radius: 12px;
-  box-shadow: 0 8px 20px rgba(0,0,0,.08);
-}
-h2 {
-  text-align: center;
-  margin-bottom: 20px;
-}
-input, select, button {
-  width: 100%;
-  padding: 10px;
-  margin-top: 10px;
-  font-size: 16px;
-}
-button {
-  background: #4f83f1;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  margin-top: 16px;
-}
-#gps, #result {
-  margin-top: 10px;
-  font-size: 14px;
-}
-.error { color: red; }
-.success { color: green; }
+body{font-family:Arial;background:#f5f5f5}
+.card{max-width:420px;margin:40px auto;padding:20px;background:#fff;border-radius:8px}
+input,select,button{width:100%;padding:10px;margin-top:10px}
+button{background:#4e80ee;color:#fff;border:0;font-size:16px}
+.msg{margin-top:10px}
 </style>
 </head>
-
 <body>
 <div class="card">
-  <h2>員工打卡</h2>
+<h2 style="text-align:center">員工打卡</h2>
 
-  <input id="name" placeholder="姓名" />
+<input id="name" placeholder="姓名">
+<select id="action">
+  <option value="上班">上班</option>
+  <option value="下班">下班</option>
+</select>
 
-  <select id="action">
-    <option value="上班">上班</option>
-    <option value="下班">下班</option>
-  </select>
-
-  <div id="gps">GPS 讀取中…</div>
-
-  <button onclick="punch()">打卡</button>
-
-  <div id="result"></div>
+<div id="gps">GPS 取得中…</div>
+<button onclick="punch()">打卡</button>
+<div class="msg" id="msg"></div>
 </div>
 
 <script>
-const API_URL = "https://punch-api.jackey1688.workers.dev/api/punch";
+let lat=null,lng=null;
 
-let currentLat = null;
-let currentLng = null;
+navigator.geolocation.getCurrentPosition(p=>{
+  lat=p.coords.latitude;
+  lng=p.coords.longitude;
+  document.getElementById('gps').innerText=
+    'GPS OK : '+lat.toFixed(5)+', '+lng.toFixed(5);
+},()=>{
+  document.getElementById('gps').innerText='GPS 失敗';
+});
 
-/* 取得 GPS */
-navigator.geolocation.getCurrentPosition(
-  pos => {
-    currentLat = pos.coords.latitude;
-    currentLng = pos.coords.longitude;
-    document.getElementById("gps").innerText =
-      `GPS OK：${currentLat.toFixed(5)}, ${currentLng.toFixed(5)}`;
-  },
-  err => {
-    document.getElementById("gps").innerText = "❌ 無法取得 GPS";
-  },
-  { enableHighAccuracy: true, timeout: 8000 }
-);
-
-async function punch() {
-  const name = document.getElementById("name").value.trim();
-  const action = document.getElementById("action").value;
-  const result = document.getElementById("result");
-
-  if (!name) {
-    alert("請輸入姓名");
-    return;
-  }
-
-  result.innerHTML = "送出中…";
-
-  try {
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        action,
-        lat: currentLat,
-        lng: currentLng,
-        time: new Date().toISOString()
-      })
-    });
-
-    if (!res.ok) throw new Error("API error");
-
-    result.innerHTML = "✅ 打卡成功";
-    result.className = "success";
-  } catch (e) {
-    result.innerHTML = "❌ 打卡失敗（API 錯誤）";
-    result.className = "error";
+async function punch(){
+  const body={
+    name:document.getElementById('name').value,
+    action:document.getElementById('action').value,
+    lat,lng,
+    time:new Date().toISOString()
+  };
+  try{
+    const r=await fetch(
+      'https://punch-api.jackey1688.workers.dev/api/punch',
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}
+    );
+    if(!r.ok) throw '';
+    document.getElementById('msg').innerText='✅ 打卡成功';
+  }catch{
+    document.getElementById('msg').innerText='❌ 打卡失敗（API）';
   }
 }
 </script>
