@@ -1,61 +1,40 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8">
-<title>員工打卡</title>
-<style>
-body{font-family:Arial;background:#f5f5f5}
-.card{max-width:420px;margin:40px auto;padding:20px;background:#fff;border-radius:8px}
-input,select,button{width:100%;padding:10px;margin-top:10px}
-button{background:#4e80ee;color:#fff;border:0;font-size:16px}
-.msg{margin-top:10px}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>員工打卡</title>
+  <script defer src="work.js"></script>
+  <style>
+    body { font-family: system-ui; background:#f5f6f8; }
+    .card {
+      max-width:420px; margin:60px auto; background:#fff;
+      padding:24px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.1)
+    }
+    input, select, button {
+      width:100%; padding:12px; margin-top:12px; font-size:16px
+    }
+    button { background:#4f7df3; color:#fff; border:0; border-radius:8px }
+    #msg { margin-top:12px; font-weight:bold }
+  </style>
 </head>
 <body>
+
 <div class="card">
-<h2 style="text-align:center">員工打卡</h2>
+  <h2 style="text-align:center">員工打卡</h2>
 
-<input id="name" placeholder="姓名">
-<select id="action">
-  <option value="上班">上班</option>
-  <option value="下班">下班</option>
-</select>
+  <input id="name" placeholder="姓名">
+  <select id="action">
+    <option value="上班">上班</option>
+    <option value="下班">下班</option>
+  </select>
 
-<div id="gps">GPS 取得中…</div>
-<button onclick="punch()">打卡</button>
-<div class="msg" id="msg"></div>
+  <div id="gps">GPS 取得中...</div>
+
+  <button onclick="doPunch()">打卡</button>
+
+  <div id="msg"></div>
 </div>
 
-<script>
-let lat=null,lng=null;
-
-navigator.geolocation.getCurrentPosition(p=>{
-  lat=p.coords.latitude;
-  lng=p.coords.longitude;
-  document.getElementById('gps').innerText=
-    'GPS OK : '+lat.toFixed(5)+', '+lng.toFixed(5);
-},()=>{
-  document.getElementById('gps').innerText='GPS 失敗';
-});
-
-async function punch(){
-  const body={
-    name:document.getElementById('name').value,
-    action:document.getElementById('action').value,
-    lat,lng,
-    time:new Date().toISOString()
-  };
-  try{
-    const r=await fetch(
-      'https://punch-api.jackey1688.workers.dev/api/punch',
-      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}
-    );
-    if(!r.ok) throw '';
-    document.getElementById('msg').innerText='✅ 打卡成功';
-  }catch{
-    document.getElementById('msg').innerText='❌ 打卡失敗（API）';
-  }
-}
-</script>
 </body>
 </html>

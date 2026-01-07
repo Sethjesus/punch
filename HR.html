@@ -1,25 +1,22 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>HR 打卡紀錄</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script defer src="work.js"></script>
   <style>
-    body { font-family: system-ui; background:#f2f4f7; padding:30px }
-    h1 { text-align:center }
-    table {
-      width:100%; max-width:900px; margin:auto;
-      border-collapse:collapse; background:#fff;
-      box-shadow:0 8px 20px rgba(0,0,0,.08)
-    }
-    th,td { padding:12px; border-bottom:1px solid #eee; text-align:center }
-    th { background:#3b82f6; color:#fff }
-    .err { color:#c00; padding:20px }
+    body { font-family: system-ui; background:#f5f6f8 }
+    table { width:100%; border-collapse:collapse; background:#fff }
+    th, td { padding:10px; border:1px solid #ddd; text-align:center }
+    th { background:#f0f0f0 }
   </style>
 </head>
-<body>
+<body onload="loadHR()">
 
-<h1>HR 打卡紀錄</h1>
+<h2>HR 打卡紀錄</h2>
+
+<div id="office"></div>
 
 <table>
   <thead>
@@ -27,44 +24,14 @@
       <th>姓名</th>
       <th>動作</th>
       <th>時間</th>
-      <th>距離（公尺）</th>
+      <th>緯度</th>
+      <th>經度</th>
+      <th>距離(m)</th>
+      <th>是否合格</th>
     </tr>
   </thead>
-  <tbody id="rows">
-    <tr><td colspan="4">讀取中…</td></tr>
-  </tbody>
+  <tbody id="rows"></tbody>
 </table>
-
-<script>
-const HR_API = "https://punch-api.jackey1688.workers.dev/api/hr";
-
-async function loadHR() {
-  const tbody = document.getElementById("rows");
-  try {
-    const res = await fetch(HR_API, { method: "POST" });
-    const data = await res.json();
-
-    if (!data.length) {
-      tbody.innerHTML = `<tr><td colspan="4">尚無資料</td></tr>`;
-      return;
-    }
-
-    tbody.innerHTML = data.map(r => `
-      <tr>
-        <td>${r.name}</td>
-        <td>${r.action}</td>
-        <td>${new Date(r.time).toLocaleString()}</td>
-        <td>${r.distance ?? "N/A"}</td>
-      </tr>
-    `).join("");
-  } catch {
-    tbody.innerHTML =
-      `<tr><td colspan="4" class="err">❌ 讀取失敗（HR API 尚未開放）</td></tr>`;
-  }
-}
-
-loadHR();
-</script>
 
 </body>
 </html>
