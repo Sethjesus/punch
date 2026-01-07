@@ -1,62 +1,70 @@
-<!DOCTYPE html><html><head>
-<meta charset="utf-8"><title>HR</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>HR 打卡後台</title>
+<style>
+table{border-collapse:collapse;width:100%}
+td,th{border:1px solid #aaa;padding:4px;text-align:center}
+button{cursor:pointer}
+</style>
 </head>
 <body>
-<div id="auth">
-  密碼 <input id="pwd" type="password">
-  <button onclick="login()">登入</button>
-</div>
-<div id="panel" style="display:none">
-<button onclick="load()">重新整理</button>
-<button onclick="excel()">匯出 Excel</button>
-<table border="1" id="t"></table>
-</div>
 
-<div id="mapBox" style="display:none">
-<button onclick="mapBox.style.display='none'">關閉</button>
-<div id="map" style="height:400px"></div>
-</div>
+<h2>HR 打卡紀錄</h2>
+
+<table>
+<thead>
+<tr>
+  <th>人</th><th>動作</th><th>時間</th><th>距離</th>
+  <th>✔</th><th>✖</th><th>備註</th><th>地圖</th>
+</tr>
+</thead>
+<tbody id="tbody"></tbody>
+</table>
 
 <script>
 const API="https://punch-api.jackey1688.workers.dev";
-let cache=[], map;
-function login(){ if(pwd.value==="1234"){auth.style.display="none";panel.style.display="block";load();} }
+
+function tw(t){
+  return new Date(t).toLocaleString("zh-TW",{timeZone:"Asia/Taipei"});
+}
+
+function approve(td){
+  td.innerHTML="✔";
+  td.nextElementSibling.innerHTML="";
+}
+
+function reject(td){
+  td.innerHTML="✖";
+  td.previousElementSibling.innerHTML="";
+}
+
+function map(lat,lng){
+  window.open(`https://www.google.com/maps?q=${lat},${lng}`);
+}
+
 async function load(){
-  const r=await fetch(API+"/api/records"); cache=await r.json();
-  t.innerHTML="<tr><th>人</th><th>動作</th><th>時間</th><th>距離</th><th>✔</th><th>簽核</th><th>備註</th><th>地圖</th></tr>";
-  cache.forEach(x=>{
-    t.innerHTML+=`<tr>
-      <td>${x.name}</td><td>${x.type}</td><td>${x.time}</td><td>${x.distance}</td>
-      <td>${x.ok?"✔":"❌"}</td>
-      <td>
-        <button onclick="review('${x.key}','approved')">✔</button>
-        <button onclick="review('${x.key}','rejected')">❌</button>
-      </td>
-      <td><input id="n-${x.key}" value="${x.reviewNote||""}"></td>
-      <td><button onclick="show(${x.lat},${x.lng})">🗺️</button></td>
-    </tr>`;
+  const r=await fetch(API);
+  const d=await r.json();
+  tbody.innerHTML="";
+
+  d.rows.forEach(x=>{
+    tbody.innerHTML+=`
+      <tr>
+        <td>${x.name}</td>
+        <td>${x.action}</td>
+        <td>${tw(x.created_at)}</td>
+        <td>${x.distance??""}</td>
+        <td onclick="approve(this)">✔</td>
+        <td onclick="reject(this)">✖</td>
+        <td><input></td>
+        <td><button onclick="map(${x.lat},${x.lng})">📍</button></td>
+      </tr>`;
   });
 }
-async function review(k,s){
-  const note=document.getElementById("n-"+k).value;
-  await fetch(API+"/api/review",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k,review:s,note})});
-  load();
-}
-function show(lat,lng){
-  mapBox.style.display="block";
-  if(map) map.remove();
-  map=L.map("map").setView([lat,lng],17);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-  L.marker([lat,lng]).addTo(map);
-}
-function excel(){
-  const ws=XLSX.utils.json_to_sheet(cache);
-  const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,"Records");
-  XLSX.writeFile(wb,"HR.xlsx");
-}
+load();
 </script>
-</body></html>
+
+</body>
+</html>

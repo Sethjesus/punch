@@ -1,26 +1,64 @@
-<!DOCTYPE html><html lang="zh-TW"><head>
-<meta charset="utf-8"><title>員工打卡</title></head>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>員工打卡</title>
+<style>
+body{font-family:sans-serif;background:#f5f5f5}
+.card{width:360px;margin:40px auto;background:#fff;padding:20px;border-radius:10px}
+input,select,button{width:100%;padding:10px;margin:6px 0}
+button{background:#4285f4;color:#fff;border:none;font-size:16px}
+</style>
+</head>
 <body>
-姓名 <input id="name">
-<select id="type">
-  <option>上班</option><option>下班</option><option>出差</option>
-</select>
-<button onclick="punch()">打卡</button>
-<pre id="debug"></pre>
+
+<div class="card">
+  <h2>員工打卡</h2>
+  <input id="name" placeholder="姓名">
+  <select id="action">
+    <option value="上班">上班</option>
+    <option value="下班">下班</option>
+  </select>
+  <div id="gps">GPS 讀取中…</div>
+  <button onclick="punch()">打卡</button>
+  <div id="result"></div>
+</div>
 
 <script>
-const API="https://punch-api.jackey1688.workers.dev";
+const API = "https://punch-api.jackey1688.workers.dev";
+let lat=null,lng=null;
+
+navigator.geolocation.getCurrentPosition(p=>{
+  lat=p.coords.latitude;
+  lng=p.coords.longitude;
+  gps.innerText=`GPS OK : ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+});
+
 async function punch(){
-  const pos=await new Promise((r,j)=>navigator.geolocation.getCurrentPosition(r,j));
-  const p={
-    name:name.value,
-    type:type.value,
-    lat:pos.coords.latitude,
-    lng:pos.coords.longitude
-  };
-  debug.textContent=JSON.stringify(p,null,2);
-  await fetch(API+"/api/punch",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
-  alert("完成");
+  const name=document.getElementById("name").value.trim();
+  const action=document.getElementById("action").value;
+  const result=document.getElementById("result");
+
+  if(!name){ result.innerText="❌ 請輸入姓名"; return; }
+
+  result.innerText="送出中…";
+
+  const r=await fetch(API,{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({ name, action, lat, lng, distance:null })
+  });
+  const d=await r.json();
+
+  if(d.ok){
+    result.innerHTML=`✅ 打卡成功<br>
+      姓名：${name}<br>
+      動作：${action}<br>
+      時間：${new Date().toLocaleString("zh-TW")}`;
+  }else{
+    result.innerText="❌ 打卡失敗";
+  }
 }
 </script>
-</body></html>
+</body>
+</html>
