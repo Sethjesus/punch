@@ -2,103 +2,66 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>員工打卡</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
-body { font-family: Arial; background:#f5f5f5; }
-.card {
-  max-width:420px; margin:40px auto; background:#fff;
-  padding:20px; border-radius:12px;
-}
-input, select, button {
-  width:100%; padding:10px; margin-top:10px;
-}
-button {
-  background:#4f7df3; color:#fff; border:none; border-radius:6px;
-}
-#gps { margin-top:10px; font-size:14px; }
-#debug {
-  margin-top:12px; font-size:12px;
-  background:#eee; padding:8px; border-radius:6px;
-  white-space:pre-wrap;
-}
+body{font-family:Arial;background:#f5f5f5}
+.card{max-width:420px;margin:20px auto;background:#fff;padding:16px;border-radius:12px}
+input,select,button{width:100%;padding:10px;margin-top:10px}
+button{background:#4f7df3;color:#fff;border:0;border-radius:6px}
+#map{height:220px;margin-top:10px}
+#msg{margin-top:10px}
 </style>
 </head>
 <body>
-
 <div class="card">
-  <h2>員工打卡</h2>
-
-  <input id="name" placeholder="姓名">
-  <select id="action">
-    <option value="上班">上班</option>
-    <option value="下班">下班</option>
-  </select>
-
-  <div id="gps">GPS：尚未取得</div>
-  <button onclick="punch()">打卡</button>
-
-  <div id="debug"></div>
+<h2>員工打卡</h2>
+<input id="name" placeholder="姓名">
+<select id="action"><option>上班</option><option>下班</option></select>
+<div id="gps">GPS 取得中…</div>
+<div id="map"></div>
+<button onclick="punch()">打卡</button>
+<div id="msg"></div>
 </div>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const debugBox = document.getElementById("debug");
-const gpsBox = document.getElementById("gps");
+const API="https://punch-api.jackey1688.workers.dev/api/punch";
+const OFFICE={lat:25.0066,lng:121.4841,limit:100};
+let map, me;
 
-function debug(msg, obj) {
-  const t = `[${new Date().toLocaleTimeString()}] ${msg}`;
-  debugBox.textContent += t + "\n";
-  if (obj) debugBox.textContent += JSON.stringify(obj, null, 2) + "\n\n";
-  console.log(t, obj || "");
+function dist(a,b,c,d){
+  const R=6371000, t=Math.PI/180;
+  const x=(c-a)*t,y=(d-b)*t;
+  const k=Math.sin(x/2)**2+Math.cos(a*t)*Math.cos(c*t)*Math.sin(y/2)**2;
+  return Math.round(R*2*Math.atan2(Math.sqrt(k),Math.sqrt(1-k)));
 }
 
-async function punch() {
-  debug("開始打卡");
-
-  if (!navigator.geolocation) {
-    debug("❌ 瀏覽器不支援 GPS");
-    return;
+function initMap(lat,lng){
+  if(!map){
+    map=L.map("map").setView([lat,lng],17);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+    L.marker([OFFICE.lat,OFFICE.lng]).addTo(map).bindPopup("辦公室");
   }
+  if(me) me.remove();
+  me=L.marker([lat,lng]).addTo(map).bindPopup("你").openPopup();
+}
 
-  navigator.geolocation.getCurrentPosition(async pos => {
-    const payload = {
-      name: document.getElementById("name").value,
-      action: document.getElementById("action").value,
-      lat: pos.coords.latitude,
-      lng: pos.coords.longitude
-    };
+function punch(){
+  navigator.geolocation.getCurrentPosition(async p=>{
+    const lat=p.coords.latitude,lng=p.coords.longitude;
+    initMap(lat,lng);
+    const d=dist(lat,lng,OFFICE.lat,OFFICE.lng);
+    const valid=d<=OFFICE.limit;
+    gps.textContent=`距離 ${d} m（${valid?"合格":"不合格"}）`;
 
-    gpsBox.textContent = `GPS OK：${payload.lat}, ${payload.lng}`;
-    debug("GPS 取得成功", payload);
-
-    try {
-      const res = await fetch(
-        "https://punch-api.jackey1688.workers.dev/api/punch",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        }
-      );
-
-      debug("HTTP Status", { status: res.status });
-
-      const data = await res.json();
-      debug("API 回傳", data);
-
-      if (data.ok) {
-        debug("✅ 打卡成功");
-      } else {
-        debug("❌ 打卡失敗", data);
-      }
-    } catch (e) {
-      debug("❌ fetch 例外", { error: e.message });
-    }
-  }, err => {
-    debug("❌ GPS 失敗", err);
-  });
+    const res=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({name:name.value,action:action.value,lat,lng,distance:d,valid})
+    });
+    msg.textContent=(await res.json()).ok?"✅ 打卡成功":"❌ 失敗";
+  },()=>gps.textContent="GPS 失敗");
 }
 </script>
-
 </body>
 </html>

@@ -1,69 +1,20 @@
-<!doctype html>
-<html lang="zh-Hant">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="manifest" href="manifest.webmanifest">
-  <title>請假申請</title>
-  <style>
-    body{font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif;margin:0;background:#f3f4f6}
-    .wrap{max-width:420px;margin:0 auto;padding:18px}
-    .card{background:#fff;border-radius:16px;padding:16px;box-shadow:0 6px 18px rgba(0,0,0,.08)}
-    input,select,textarea{width:100%;padding:12px;border-radius:12px;border:1px solid #ddd;margin-top:8px;font-size:16px}
-    button{width:100%;padding:14px;border:0;border-radius:14px;font-size:18px;margin-top:12px;background:#111827;color:#fff}
-    .msg{margin-top:12px;white-space:pre-wrap}
-  </style>
-</head>
+<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8"><title>請假</title></head>
 <body>
-  <div class="wrap">
-    <div class="card">
-      <h2>請假申請</h2>
-      <label>員工編號</label>
-      <input id="emp" placeholder="例如：A001" />
-
-      <label>假別</label>
-      <select id="type">
-        <option value="annual">特休</option>
-        <option value="sick">病假</option>
-        <option value="personal">事假</option>
-      </select>
-
-      <label>開始日期</label>
-      <input id="start" type="date" />
-      <label>結束日期</label>
-      <input id="end" type="date" />
-
-      <label>原因</label>
-      <textarea id="reason" rows="3" placeholder="簡述原因"></textarea>
-
-      <button onclick="submitLeave()">送出申請</button>
-      <div class="msg" id="msg"></div>
-      <hr>
-      <a href="index.html">回打卡</a>
-    </div>
-  </div>
-
+<h2>請假申請</h2>
+<input id="name" placeholder="姓名">
+<select id="type"><option>事假</option><option>病假</option><option>特休</option></select>
+<label><input type="checkbox" id="halfDay" onchange="period.disabled=!this.checked"> 半天</label>
+<select id="period" disabled><option value="AM">上午</option><option value="PM">下午</option></select>
+<input type="date" id="start"><input type="date" id="end">
+<button onclick="apply()">送出</button>
 <script>
-const API_BASE = "https://YOUR-WORKER-URL"; // 同 index.html
-
-async function submitLeave(){
-  const employeeId = emp.value.trim();
-  const leaveType = type.value;
-  const startDate = start.value;
-  const endDate = end.value;
-  const reason = reason.value.trim();
-
-  if(!employeeId || !startDate || !endDate){ msg.textContent="資料未填完整"; return; }
-
-  msg.textContent="送出中…";
-  const r = await fetch(`${API_BASE}/api/leave`, {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ employeeId, leaveType, startDate, endDate, reason })
+async function apply(){
+  await fetch("https://punch-api.jackey1688.workers.dev/api/leave/apply",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({name:name.value,type:type.value,start:start.value,end:end.value,
+      halfDay:halfDay.checked,period:halfDay.checked?period.value:""})
   });
-  const t = await r.text();
-  msg.textContent = r.ok ? `成功：${t}` : `失敗：${r.status}\n${t}`;
+  alert("已送出");
 }
 </script>
-</body>
-</html>
+</body></html>
