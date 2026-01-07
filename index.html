@@ -2,24 +2,32 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>員工打卡</title>
 <style>
 body { font-family: Arial; background:#f5f5f5; }
 .card {
-  max-width:420px; margin:60px auto; background:#fff;
-  padding:24px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.1);
+  max-width:420px; margin:40px auto; background:#fff;
+  padding:20px; border-radius:12px;
 }
 input, select, button {
-  width:100%; padding:12px; margin-top:12px; font-size:16px;
+  width:100%; padding:10px; margin-top:10px;
 }
-button { background:#4f7df3; color:#fff; border:0; border-radius:8px; }
-#msg { margin-top:12px; }
+button {
+  background:#4f7df3; color:#fff; border:none; border-radius:6px;
+}
+#gps { margin-top:10px; font-size:14px; }
+#debug {
+  margin-top:12px; font-size:12px;
+  background:#eee; padding:8px; border-radius:6px;
+  white-space:pre-wrap;
+}
 </style>
 </head>
 <body>
 
 <div class="card">
-  <h2 style="text-align:center">員工打卡</h2>
+  <h2>員工打卡</h2>
 
   <input id="name" placeholder="姓名">
   <select id="action">
@@ -27,62 +35,70 @@ button { background:#4f7df3; color:#fff; border:0; border-radius:8px; }
     <option value="下班">下班</option>
   </select>
 
-  <div id="gps">GPS 取得中…</div>
-
+  <div id="gps">GPS：尚未取得</div>
   <button onclick="punch()">打卡</button>
-  <div id="msg"></div>
+
+  <div id="debug"></div>
 </div>
 
 <script>
-const API = "https://punch-api.jackey1688.workers.dev/api/punch";
-const COMPANY_LAT = 25.00654;
-const COMPANY_LNG = 121.48416;
+const debugBox = document.getElementById("debug");
+const gpsBox = document.getElementById("gps");
 
-let lat = null, lng = null;
-
-navigator.geolocation.getCurrentPosition(
-  p => {
-    lat = p.coords.latitude;
-    lng = p.coords.longitude;
-    document.getElementById("gps").innerText =
-      `GPS OK : ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  },
-  () => document.getElementById("gps").innerText = "❌ GPS 失敗"
-);
-
-function distance(lat1,lng1,lat2,lng2){
-  const R=6371000;
-  const dLat=(lat2-lat1)*Math.PI/180;
-  const dLng=(lng2-lng1)*Math.PI/180;
-  const a=Math.sin(dLat/2)**2+
-    Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
-    Math.sin(dLng/2)**2;
-  return Math.round(R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));
+function debug(msg, obj) {
+  const t = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  debugBox.textContent += t + "\n";
+  if (obj) debugBox.textContent += JSON.stringify(obj, null, 2) + "\n\n";
+  console.log(t, obj || "");
 }
 
-async function punch(){
-  const name = nameInput.value.trim();
-  if(!name) return alert("請輸入姓名");
+async function punch() {
+  debug("開始打卡");
 
-  const d = lat ? distance(lat,lng,COMPANY_LAT,COMPANY_LNG) : null;
+  if (!navigator.geolocation) {
+    debug("❌ 瀏覽器不支援 GPS");
+    return;
+  }
 
-  const res = await fetch(API,{
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body:JSON.stringify({
-      name,
-      action: action.value,
-      lat,
-      lng,
-      distance: d,
-      time: new Date().toISOString()
-    })
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const payload = {
+      name: document.getElementById("name").value,
+      action: document.getElementById("action").value,
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude
+    };
+
+    gpsBox.textContent = `GPS OK：${payload.lat}, ${payload.lng}`;
+    debug("GPS 取得成功", payload);
+
+    try {
+      const res = await fetch(
+        "https://punch-api.jackey1688.workers.dev/api/punch",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        }
+      );
+
+      debug("HTTP Status", { status: res.status });
+
+      const data = await res.json();
+      debug("API 回傳", data);
+
+      if (data.ok) {
+        debug("✅ 打卡成功");
+      } else {
+        debug("❌ 打卡失敗", data);
+      }
+    } catch (e) {
+      debug("❌ fetch 例外", { error: e.message });
+    }
+  }, err => {
+    debug("❌ GPS 失敗", err);
   });
-
-  msg.innerHTML = res.ok
-    ? "✅ 打卡成功"
-    : "❌ 打卡失敗";
 }
 </script>
+
 </body>
 </html>

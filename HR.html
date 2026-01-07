@@ -4,12 +4,14 @@
 <meta charset="UTF-8">
 <title>HR 打卡紀錄</title>
 <style>
-body{font-family:Arial;padding:20px}
-table{border-collapse:collapse;width:100%}
-th,td{border:1px solid #ccc;padding:8px;text-align:center}
-th{background:#f4f4f4}
-.pass{color:green;font-weight:bold}
-.fail{color:red;font-weight:bold}
+body { font-family: Arial; padding:20px; }
+table { border-collapse: collapse; width:100%; }
+th, td { border:1px solid #ccc; padding:8px; text-align:center; }
+th { background:#f0f0f0; }
+#debug {
+  margin-top:10px; font-size:12px;
+  background:#eee; padding:8px; white-space:pre-wrap;
+}
 </style>
 </head>
 <body>
@@ -20,41 +22,58 @@ th{background:#f4f4f4}
 <table>
 <thead>
 <tr>
-<th>姓名</th>
-<th>動作</th>
-<th>時間</th>
-<th>緯度</th>
-<th>經度</th>
-<th>距離(m)</th>
-<th>是否合格</th>
+  <th>姓名</th>
+  <th>動作</th>
+  <th>時間</th>
+  <th>緯度</th>
+  <th>經度</th>
 </tr>
 </thead>
 <tbody id="rows"></tbody>
 </table>
 
+<div id="debug"></div>
+
 <script>
-const API = "https://punch-api.jackey1688.workers.dev/api/records";
+const rows = document.getElementById("rows");
+const debugBox = document.getElementById("debug");
 
-async function load(){
-  const res = await fetch(API);
-  const data = await res.json();
-  rows.innerHTML = "";
-
-  data.forEach(r=>{
-    rows.innerHTML += `
-      <tr>
-        <td>${r.name}</td>
-        <td>${r.action}</td>
-        <td>${new Date(r.time).toLocaleString()}</td>
-        <td>${r.lat ?? ""}</td>
-        <td>${r.lng ?? ""}</td>
-        <td>${r.distance ?? ""}</td>
-        <td class="${r.pass?'pass':'fail'}">
-          ${r.pass?'合格':'不合格'}
-        </td>
-      </tr>`;
-  });
+function debug(msg, obj) {
+  debugBox.textContent += msg + "\n";
+  if (obj) debugBox.textContent += JSON.stringify(obj, null, 2) + "\n\n";
 }
+
+async function load() {
+  debug("載入 HR records");
+
+  try {
+    const res = await fetch(
+      "https://punch-api.jackey1688.workers.dev/api/records"
+    );
+
+    debug("HTTP Status", { status: res.status });
+
+    const data = await res.json();
+    debug("資料筆數", { count: data.length });
+    debug("第一筆資料", data[0]);
+
+    rows.innerHTML = "";
+    data.forEach(r => {
+      rows.innerHTML += `
+        <tr>
+          <td>${r.name}</td>
+          <td>${r.action}</td>
+          <td>${new Date(r.time).toLocaleString()}</td>
+          <td>${r.lat ?? ""}</td>
+          <td>${r.lng ?? ""}</td>
+        </tr>`;
+    });
+
+  } catch (e) {
+    debug("❌ HR 讀取失敗", { error: e.message });
+  }
+}
+
 load();
 </script>
 
