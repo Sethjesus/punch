@@ -1,74 +1,74 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8" />
 <title>員工打卡</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body{font-family:system-ui;background:#f2f4f7;padding:20px}
-.card{max-width:420px;margin:auto;background:#fff;padding:20px;border-radius:12px}
-input,select,button{width:100%;padding:12px;margin-top:10px}
-button{background:#2563eb;color:#fff;border:none}
-.ok{color:green}.err{color:red}
-</style>
 </head>
 <body>
-<div class="card">
+
 <h2>員工打卡</h2>
 
-<input id="name" placeholder="姓名">
+姓名：
+<input id="name" value="廖志豪"><br><br>
 
-<select id="action" onchange="toggleTrip()">
-  <option value="上班">上班</option>
-  <option value="下班">下班</option>
-  <option value="出差">出差</option>
-</select>
+動作：
+<select id="action">
+  <option>上班</option>
+  <option>下班</option>
+  <option>出差</option>
+</select><br><br>
 
-<div id="tripBox" style="display:none">
-  <input id="trip_place" placeholder="出差地點 / 客戶">
-</div>
+出差地點：
+<input id="place" placeholder="僅出差填寫"><br><br>
 
-<div id="gps">GPS 取得中…</div>
+<div id="gps">GPS：尚未取得</div><br>
+
 <button onclick="punch()">打卡</button>
-<div id="result"></div>
-</div>
+
+<hr>
+<h3>DEBUG</h3>
+<pre id="debug"></pre>
 
 <script>
 const API = "https://punch-api.jackey1688.workers.dev";
 
-let lat=null,lng=null;
-navigator.geolocation.getCurrentPosition(p=>{
-  lat=p.coords.latitude; lng=p.coords.longitude;
-  gps.innerText=`GPS OK：${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-},()=>gps.innerText="❌ GPS 失敗");
+let lat = null, lng = null;
 
-function toggleTrip(){
-  tripBox.style.display = action.value==="出差"?"block":"none";
-}
+navigator.geolocation.getCurrentPosition(
+  p => {
+    lat = p.coords.latitude;
+    lng = p.coords.longitude;
+    gps.innerText = `GPS OK：${lat}, ${lng}`;
+  },
+  e => gps.innerText = "GPS 失敗：" + e.message
+);
 
-async function punch(){
-  result.innerText="送出中…";
-  try{
-    const r = await fetch(API+"/api/punch",{
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({
-        name:name.value,
-        action:action.value,
-        lat,lng,
-        trip_place:trip_place?.value||""
-      })
+async function punch() {
+  debug.textContent = "STEP 1: 準備送出";
+
+  const body = {
+    name: name.value,
+    action: action.value,
+    place: place.value,
+    lat, lng
+  };
+
+  debug.textContent += "\nSTEP 2: " + JSON.stringify(body, null, 2);
+
+  try {
+    const res = await fetch(API + "/api/punch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
     });
-    const d = await r.json();
-    result.innerHTML = `
-      <div class="ok">✅ 完成</div>
-      距離：${d.record.distance ?? "N/A"} m<br>
-      是否合格：${d.record.qualified ? "✅":"❌"}
-    `;
-  }catch(e){
-    result.innerHTML="<div class='err'>❌ 失敗</div>";
+
+    const json = await res.json();
+    debug.textContent += "\nSTEP 3: 回傳\n" + JSON.stringify(json, null, 2);
+  } catch (e) {
+    debug.textContent += "\nERROR: " + e.message;
   }
 }
 </script>
+
 </body>
 </html>

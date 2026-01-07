@@ -1,65 +1,63 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8" />
 <title>請假申請</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body{font-family:system-ui;background:#f2f4f7;padding:20px}
-.card{max-width:420px;margin:auto;background:#fff;padding:20px;border-radius:12px}
-input,select,button{width:100%;padding:12px;margin-top:10px}
-button{background:#16a34a;color:#fff;border:none}
-</style>
 </head>
 <body>
-<div class="card">
+
 <h2>請假申請</h2>
 
-<input id="name" placeholder="姓名">
-<input id="date" type="date">
+姓名：
+<input id="name" value="廖志豪"><br><br>
 
-<select id="duration" onchange="toggleHalf()">
-  <option value="full">全天</option>
-  <option value="half">半天</option>
-</select>
+日期：
+<input id="date" type="date"><br><br>
 
-<select id="period" style="display:none">
-  <option value="AM">上午</option>
-  <option value="PM">下午</option>
-</select>
+類型：
+<select id="type">
+  <option>全天</option>
+  <option>半天</option>
+</select><br><br>
 
-<input id="reason" placeholder="請假原因">
-<button onclick="apply()">送出</button>
+原因：
+<input id="reason"><br><br>
 
-<div id="msg"></div>
-</div>
+<button onclick="send()">送出</button>
+
+<hr>
+<h3>DEBUG</h3>
+<pre id="debug"></pre>
 
 <script>
-const API="https://punch-api.jackey1688.workers.dev";
+const API = "https://punch-api.jackey1688.workers.dev";
 
-function toggleHalf(){
-  period.style.display = duration.value==="half"?"block":"none";
-}
+async function send() {
+  debug.textContent = "STEP 1: 送出請假";
 
-async function apply(){
-  msg.innerText="送出中…";
-  try{
-    await fetch(API+"/api/leave",{
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({
-        name:name.value,
-        date:date.value,
-        duration:duration.value,
-        period:duration.value==="half"?period.value:"",
-        reason:reason.value
-      })
+  const body = {
+    name: name.value,
+    date: date.value,
+    type: type.value,
+    reason: reason.value
+  };
+
+  debug.textContent += "\nSTEP 2:\n" + JSON.stringify(body, null, 2);
+
+  try {
+    const res = await fetch(API + "/api/leave", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
     });
-    msg.innerText="✅ 已送出";
-  }catch(e){
-    msg.innerText="❌ 失敗";
+
+    const json = await res.json();
+    debug.textContent += "\nSTEP 3:\n" + JSON.stringify(json, null, 2);
+  } catch (e) {
+    debug.textContent += "\nERROR: " + e.message;
   }
 }
 </script>
+
 </body>
 </html>

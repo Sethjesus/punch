@@ -1,52 +1,63 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8" />
 <title>HR 打卡紀錄</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body{font-family:system-ui;padding:20px}
-table{border-collapse:collapse;width:100%}
-th,td{border:1px solid #ccc;padding:6px;text-align:center}
-th{background:#f4f4f4}
-</style>
 </head>
 <body>
+
 <h2>HR 打卡紀錄</h2>
 
-<table>
+<table border="1">
 <thead>
 <tr>
-<th>姓名</th>
-<th>動作</th>
-<th>時間</th>
-<th>距離(m)</th>
-<th>合格</th>
-<th>出差地點</th>
+  <th>姓名</th>
+  <th>動作</th>
+  <th>時間</th>
+  <th>距離(m)</th>
+  <th>合格</th>
+  <th>出差地點</th>
 </tr>
 </thead>
 <tbody id="rows"></tbody>
 </table>
 
-<script>
-const API="https://punch-api.jackey1688.workers.dev";
+<hr>
+<h3>DEBUG</h3>
+<pre id="debug"></pre>
 
-fetch(API+"/api/records")
- .then(r=>r.json())
- .then(list=>{
-  rows.innerHTML="";
-  list.forEach(r=>{
-    rows.innerHTML+=`
-      <tr>
+<script>
+const API = "https://punch-api.jackey1688.workers.dev";
+
+async function load() {
+  debug.textContent = "STEP 1: 讀取紀錄";
+
+  try {
+    const res = await fetch(API + "/api/records");
+    const data = await res.json();
+
+    debug.textContent += "\nSTEP 2: 筆數 = " + data.length;
+
+    data.forEach(r => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
         <td>${r.name}</td>
         <td>${r.action}</td>
-        <td>${new Date(r.time).toLocaleString()}</td>
-        <td>${r.distance ?? ""}</td>
-        <td>${r.qualified?"✅":"❌"}</td>
-        <td>${r.trip_place || ""}</td>
-      </tr>`;
-  });
- });
+        <td>${r.time}</td>
+        <td>${r.distance}</td>
+        <td>${r.pass ? "✔" : "❌"}</td>
+        <td>${r.place || ""}</td>
+      `;
+      rows.appendChild(tr);
+    });
+
+  } catch (e) {
+    debug.textContent += "\nERROR: " + e.message;
+  }
+}
+
+load();
 </script>
+
 </body>
 </html>
