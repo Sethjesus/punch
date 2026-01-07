@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>請假申請</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:system-ui;background:#f2f4f7;padding:20px}
+.card{max-width:420px;margin:auto;background:#fff;padding:20px;border-radius:12px}
+input,select,button{width:100%;padding:12px;margin-top:10px}
+button{background:#16a34a;color:#fff;border:none}
+</style>
+</head>
+<body>
+<div class="card">
+<h2>請假申請</h2>
+
+<input id="name" placeholder="姓名">
+<input id="date" type="date">
+
+<select id="duration" onchange="toggleHalf()">
+  <option value="full">全天</option>
+  <option value="half">半天</option>
+</select>
+
+<select id="period" style="display:none">
+  <option value="AM">上午</option>
+  <option value="PM">下午</option>
+</select>
+
+<input id="reason" placeholder="請假原因">
+<button onclick="apply()">送出</button>
+
+<div id="msg"></div>
+</div>
+
+<script>
+const API="https://punch-api.jackey1688.workers.dev";
+
+function toggleHalf(){
+  period.style.display = duration.value==="half"?"block":"none";
+}
+
+async function apply(){
+  msg.innerText="送出中…";
+  try{
+    await fetch(API+"/api/leave",{
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({
+        name:name.value,
+        date:date.value,
+        duration:duration.value,
+        period:duration.value==="half"?period.value:"",
+        reason:reason.value
+      })
+    });
+    msg.innerText="✅ 已送出";
+  }catch(e){
+    msg.innerText="❌ 失敗";
+  }
+}
+</script>
+</body>
+</html>

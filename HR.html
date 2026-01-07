@@ -2,86 +2,51 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<title>HR 打卡紀錄（Debug）</title>
+<title>HR 打卡紀錄</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-body { font-family: Arial; padding:20px; }
-table { border-collapse:collapse; width:100%; }
-th,td { border:1px solid #ccc; padding:6px; text-align:center; }
-th { background:#eee; }
-#debug {
-  background:#000;
-  color:#0f0;
-  padding:10px;
-  margin-bottom:10px;
-  white-space:pre-wrap;
-  font-size:13px;
-}
+body{font-family:system-ui;padding:20px}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ccc;padding:6px;text-align:center}
+th{background:#f4f4f4}
 </style>
 </head>
 <body>
-
-<h2>HR 打卡紀錄（Debug 模式）</h2>
-
-<div id="debug">[DEBUG START]</div>
+<h2>HR 打卡紀錄</h2>
 
 <table>
 <thead>
 <tr>
-  <th>姓名</th>
-  <th>動作</th>
-  <th>時間</th>
-  <th>緯度</th>
-  <th>經度</th>
-  <th>距離</th>
+<th>姓名</th>
+<th>動作</th>
+<th>時間</th>
+<th>距離(m)</th>
+<th>合格</th>
+<th>出差地點</th>
 </tr>
 </thead>
 <tbody id="rows"></tbody>
 </table>
 
 <script>
-const API = "https://punch-api.jackey1688.workers.dev";
+const API="https://punch-api.jackey1688.workers.dev";
 
-function log(msg){
-  document.getElementById("debug").textContent += "\n" + msg;
-}
-
-async function load(){
-  log("準備 fetch: " + API + "/api/records");
-
-  try{
-    const res = await fetch(API + "/api/records");
-    log("HTTP status = " + res.status);
-
-    const text = await res.text();
-    log("RAW RESPONSE:");
-    log(text.substring(0,500));
-
-    const data = JSON.parse(text);
-    log("JSON parsed, 筆數 = " + data.length);
-
-    const rows = document.getElementById("rows");
-    rows.innerHTML = "";
-
-    data.forEach(r=>{
-      rows.innerHTML += `
-        <tr>
-          <td>${r.name || ""}</td>
-          <td>${r.action || ""}</td>
-          <td>${r.time}</td>
-          <td>${r.lat ?? ""}</td>
-          <td>${r.lng ?? ""}</td>
-          <td>${r.distance ?? ""}</td>
-        </tr>`;
-    });
-
-  }catch(e){
-    log("❌ FETCH ERROR");
-    log(e.toString());
-  }
-}
-
-load();
+fetch(API+"/api/records")
+ .then(r=>r.json())
+ .then(list=>{
+  rows.innerHTML="";
+  list.forEach(r=>{
+    rows.innerHTML+=`
+      <tr>
+        <td>${r.name}</td>
+        <td>${r.action}</td>
+        <td>${new Date(r.time).toLocaleString()}</td>
+        <td>${r.distance ?? ""}</td>
+        <td>${r.qualified?"✅":"❌"}</td>
+        <td>${r.trip_place || ""}</td>
+      </tr>`;
+  });
+ });
 </script>
-
 </body>
 </html>

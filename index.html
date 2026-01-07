@@ -2,23 +2,73 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<title>打卡系統 Index</title>
+<title>員工打卡</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:system-ui;background:#f2f4f7;padding:20px}
+.card{max-width:420px;margin:auto;background:#fff;padding:20px;border-radius:12px}
+input,select,button{width:100%;padding:12px;margin-top:10px}
+button{background:#2563eb;color:#fff;border:none}
+.ok{color:green}.err{color:red}
+</style>
 </head>
 <body>
+<div class="card">
+<h2>員工打卡</h2>
 
-<h2>打卡系統</h2>
+<input id="name" placeholder="姓名">
 
-<ul>
-  <li><a href="HR.html">HR 管理頁</a></li>
-  <li><a href="Leave.html">請假系統</a></li>
-</ul>
+<select id="action" onchange="toggleTrip()">
+  <option value="上班">上班</option>
+  <option value="下班">下班</option>
+  <option value="出差">出差</option>
+</select>
 
-<div id="debug"></div>
+<div id="tripBox" style="display:none">
+  <input id="trip_place" placeholder="出差地點 / 客戶">
+</div>
+
+<div id="gps">GPS 取得中…</div>
+<button onclick="punch()">打卡</button>
+<div id="result"></div>
+</div>
 
 <script>
-document.getElementById("debug").innerText =
-  "Index loaded at " + new Date().toLocaleString();
-</script>
+const API = "https://punch-api.jackey1688.workers.dev";
 
+let lat=null,lng=null;
+navigator.geolocation.getCurrentPosition(p=>{
+  lat=p.coords.latitude; lng=p.coords.longitude;
+  gps.innerText=`GPS OK：${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+},()=>gps.innerText="❌ GPS 失敗");
+
+function toggleTrip(){
+  tripBox.style.display = action.value==="出差"?"block":"none";
+}
+
+async function punch(){
+  result.innerText="送出中…";
+  try{
+    const r = await fetch(API+"/api/punch",{
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({
+        name:name.value,
+        action:action.value,
+        lat,lng,
+        trip_place:trip_place?.value||""
+      })
+    });
+    const d = await r.json();
+    result.innerHTML = `
+      <div class="ok">✅ 完成</div>
+      距離：${d.record.distance ?? "N/A"} m<br>
+      是否合格：${d.record.qualified ? "✅":"❌"}
+    `;
+  }catch(e){
+    result.innerHTML="<div class='err'>❌ 失敗</div>";
+  }
+}
+</script>
 </body>
 </html>
