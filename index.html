@@ -1,133 +1,58 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>人事打卡</title>
-  <style>
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont;
-      background: #f5f6f8;
-      margin: 0;
-      padding: 20px;
-    }
-    h2 {
-      text-align: center;
-    }
-    .card {
-      max-width: 420px;
-      margin: auto;
-      background: #fff;
-      border-radius: 12px;
-      padding: 20px;
-      box-shadow: 0 6px 18px rgba(0,0,0,0.1);
-    }
-    label {
-      display: block;
-      margin-top: 15px;
-      font-weight: bold;
-    }
-    input {
-      width: 100%;
-      padding: 10px;
-      font-size: 16px;
-      margin-top: 5px;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-    }
-    button {
-      width: 100%;
-      margin-top: 15px;
-      padding: 14px;
-      font-size: 18px;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      color: #fff;
-    }
-    .btn-in { background: #2ecc71; }
-    .btn-out { background: #e74c3c; }
-    .btn-trip { background: #3498db; }
-
-    #status {
-      margin-top: 15px;
-      font-size: 14px;
-      text-align: center;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>人事打卡</title>
+<style>
+body{background:#555;font-family:system-ui}
+.card{background:#f2f2f2;width:320px;margin:20px auto;padding:16px;border-radius:8px}
+input,button{width:100%;padding:8px;margin:6px 0}
+.log{background:#000;color:#0f0;height:150px;overflow:auto;font-size:12px;padding:6px}
+</style>
 </head>
 <body>
 
-  <div class="card">
-    <h2>📱 人事打卡</h2>
-
-    <label>姓名</label>
-    <input id="name" placeholder="請輸入姓名" />
-
-    <button class="btn-in" onclick="punch('上班')">上班打卡</button>
-    <button class="btn-out" onclick="punch('下班')">下班打卡</button>
-    <button class="btn-trip" onclick="punch('出差')">出差打卡</button>
-
-    <div id="status"></div>
-  </div>
+<div class="card">
+  <h3>員工打卡</h3>
+  <input id="name" placeholder="請輸入姓名" />
+  <button onclick="punch('上班')">上班</button>
+  <button onclick="punch('下班')">下班</button>
+  <div id="log" class="log"></div>
+</div>
 
 <script>
-const API_URL = "https://punch-api.jackey1688.workers.dev/api/punch";
+const API = "https://punch-api.jackey1688.workers.dev/api/punch";
+const company = { lat:25.00657, lng:121.48416 };
+const logBox = document.getElementById("log");
+const nameInput = document.getElementById("name");
 
-function punch(action) {
-  const name = document.getElementById("name").value.trim();
-  const status = document.getElementById("status");
+function log(t){ logBox.innerHTML+=t+"<br>"; logBox.scrollTop=logBox.scrollHeight; }
+function dist(a,b,c,d){
+  const R=6371000,toRad=x=>x*Math.PI/180;
+  const dLat=toRad(c-a), dLng=toRad(d-b);
+  const s=Math.sin(dLat/2)**2+
+    Math.cos(toRad(a))*Math.cos(toRad(c))*Math.sin(dLng/2)**2;
+  return Math.round(2*R*Math.asin(Math.sqrt(s)));
+}
 
-  if (!name) {
-    alert("請輸入姓名");
-    return;
-  }
-
-  status.innerText = "📡 取得定位中...";
-
-  if (!navigator.geolocation) {
-    alert("此裝置不支援 GPS");
-    return;
-  }
-
-  navigator.geolocation.getCurrentPosition(
-    async (pos) => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-
-      status.innerText = "⏳ 打卡送出中...";
-
-      try {
-        const res = await fetch(API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name,
-            action,
-            lat,
-            lng
-          })
-        });
-
-        const data = await res.json();
-
-        if (data.ok) {
-          status.innerText = `✅ ${action} 打卡成功`;
-        } else {
-          status.innerText = "❌ 打卡失敗：" + data.error;
-        }
-
-      } catch (e) {
-        status.innerText = "❌ API 連線失敗";
-      }
-    },
-    (err) => {
-      status.innerText = "❌ 無法取得 GPS（請開啟定位權限）";
-    },
-    { enableHighAccuracy: true, timeout: 10000 }
-  );
+function punch(action){
+  if(!nameInput.value.trim()){ alert("請輸入姓名"); return; }
+  log("📡 取得 GPS…");
+  navigator.geolocation.getCurrentPosition(async p=>{
+    const lat=p.coords.latitude, lng=p.coords.longitude;
+    const d=dist(lat,lng,company.lat,company.lng);
+    log(`👤 ${nameInput.value}`);
+    log(`📍 ${lat}, ${lng}`);
+    log(`🏢 距公司 ${d} 公尺`);
+    await fetch(API,{
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ name:nameInput.value.trim(), action, lat, lng })
+    });
+    log("✅ 打卡成功");
+  },e=>log("❌ GPS 失敗："+e.message),{enableHighAccuracy:true});
 }
 </script>
-
 </body>
 </html>

@@ -2,67 +2,243 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<title>HR 打卡後台</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HR 打卡 / 請假總覽</title>
+
 <style>
-table{border-collapse:collapse;width:100%}
-td,th{border:1px solid #aaa;padding:4px;text-align:center}
-button{cursor:pointer}
+body{
+  margin:0;
+  background:#3f3f3f;
+  font-family:system-ui;
+}
+.container{
+  max-width:1400px;
+  margin:20px auto;
+  background:#f4f4f4;
+  border-radius:10px;
+  padding:16px;
+}
+h2{margin:0 0 10px}
+.toolbar{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  margin-bottom:10px;
+}
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:14px;
+}
+th,td{
+  border-bottom:1px solid #ccc;
+  padding:6px;
+  text-align:center;
+}
+th{
+  background:#e0e0e0;
+  position:sticky;
+  top:0;
+}
+.leaveOnly{
+  background:#fff4cc;
+}
+.red{
+  color:#c0392b;
+  font-weight:bold;
+}
 </style>
 </head>
+
 <body>
 
-<h2>HR 打卡紀錄</h2>
+<div class="container">
+  <h2>HR 打卡 / 請假總覽</h2>
 
-<table>
-<thead>
-<tr>
-  <th>人</th><th>動作</th><th>時間</th><th>距離</th>
-  <th>✔</th><th>✖</th><th>備註</th><th>地圖</th>
-</tr>
-</thead>
-<tbody id="tbody"></tbody>
-</table>
+  <div class="toolbar">
+    📅 月份：
+    <input type="month" id="monthPicker">
+    <button onclick="drawTable()">重新整理</button>
+  </div>
+
+  <table id="tbl"></table>
+</div>
 
 <script>
-const API="https://punch-api.jackey1688.workers.dev";
+/* ===== API ===== */
+const API_ATT   = "https://punch-api.jackey1688.workers.dev/api/records";
+const API_LEAVE = "https://punch-api.jackey1688.workers.dev/api/leave";
+const API_APP   = "https://punch-api.jackey1688.workers.dev/api/leave/approve";
 
-function tw(t){
-  return new Date(t).toLocaleString("zh-TW",{timeZone:"Asia/Taipei"});
+/* ===== 公司座標 ===== */
+const COMPANY_LAT = 25.00657;
+const COMPANY_LNG = 121.48416;
+
+/* ===== 全域資料 ===== */
+let records = [];
+let leaves  = [];
+
+const tbl = document.getElementById("tbl");
+const monthPicker = document.getElementById("monthPicker");
+
+/* ===== 初始化月份（避免空值 / 快取雷）===== */
+if (!monthPicker.value) {
+  monthPicker.value = new Date().toISOString().slice(0,7);
 }
 
-function approve(td){
-  td.innerHTML="✔";
-  td.nextElementSibling.innerHTML="";
-}
-
-function reject(td){
-  td.innerHTML="✖";
-  td.previousElementSibling.innerHTML="";
-}
-
-function map(lat,lng){
-  window.open(`https://www.google.com/maps?q=${lat},${lng}`);
-}
-
+/* ===== 載入資料 ===== */
 async function load(){
-  const r=await fetch(API);
-  const d=await r.json();
-  tbody.innerHTML="";
+  records = await (await fetch(API_ATT)).json();
+  leaves  = await (await fetch(API_LEAVE)).json();
+  drawTable();
+}
 
-  d.rows.forEach(x=>{
-    tbody.innerHTML+=`
-      <tr>
-        <td>${x.name}</td>
-        <td>${x.action}</td>
-        <td>${tw(x.created_at)}</td>
-        <td>${x.distance??""}</td>
-        <td onclick="approve(this)">✔</td>
-        <td onclick="reject(this)">✖</td>
-        <td><input></td>
-        <td><button onclick="map(${x.lat},${x.lng})">📍</button></td>
-      </tr>`;
+/* ===== 距離計算 ===== */
+function distanceMeter(lat1,lng1,lat2,lng2){
+  const R = 6371000;
+  const dLat = (lat2-lat1)*Math.PI/180;
+  const dLng = (lng2-lng1)*Math.PI/180;
+  const a =
+    Math.sin(dLat/2)**2 +
+    Math.cos(lat1*Math.PI/180) *
+    Math.cos(lat2*Math.PI/180) *
+    Math.sin(dLng/2)**2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));
+}
+
+/* ===== 主管核准 ===== */
+async function approve(id, ok){
+  await fetch(API_APP,{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({ id, approved: ok?1:0 })
   });
 }
+
+/* ===== 畫表（最終版）===== */
+function drawTable(){
+
+  /* 🔑 關鍵：強制保證 month 是乾淨值 */
+  let month = monthPicker.value;
+  if (!month || month.length !== 7) {
+    month = "";
+  }
+
+  let html = `
+    <tr>
+      <th>日期</th>
+      <th>姓名</th>
+      <th>類型</th>
+      <th>上班</th>
+      <th>下班</th>
+      <th>GPS</th>
+      <th>距公司(m)</th>
+      <th>請假類型</th>
+      <th>請假期間</th>
+      <th>主管同意</th>
+    </tr>
+  `;
+
+  /* 用 name + date 記錄「當天已有資料」 */
+  const shown = new Set();
+
+  /* ===== ① 打卡資料 ===== */
+  records.forEach(r=>{
+    const date = r.created_at_tw?.slice(0,10);
+    if(!date) return;
+    if(month && !date.startsWith(month)) return;
+
+    const time = r.created_at_tw.slice(11,19);
+    const key = `${r.name}_${date}`;
+    shown.add(key);
+
+    const leave = leaves.find(l =>
+      l.name === r.name &&
+      date >= l.start_date &&
+      date <= l.end_date
+    );
+
+    const hasGPS = r.lat && r.lng;
+    const dist = hasGPS
+      ? distanceMeter(COMPANY_LAT,COMPANY_LNG,r.lat,r.lng)
+      : "";
+
+    const gps = hasGPS
+      ? `<a target="_blank"
+           href="https://maps.google.com/?q=${r.lat},${r.lng}">
+           ${r.lat.toFixed(5)},${r.lng.toFixed(5)}
+         </a>` : "";
+
+    html += `
+      <tr>
+        <td>${date}</td>
+        <td>${r.name}</td>
+        <td>${r.action}</td>
+        <td>${r.action==="上班"?time:""}</td>
+        <td>${r.action==="下班"?time:""}</td>
+        <td>${gps}</td>
+        <td class="${dist>200?'red':''}">
+          ${dist?dist+" m":""}
+        </td>
+        <td>${leave?leave.type:""}</td>
+        <td>${leave?leave.start_date+" ~ "+leave.end_date:""}</td>
+        <td>
+          ${
+            leave
+            ? `<input type="checkbox"
+                ${leave.approved==1?"checked":""}
+                onchange="approve(${leave.id},this.checked)">`
+            : ""
+          }
+        </td>
+      </tr>
+    `;
+  });
+
+  /* ===== ② 只有請假、沒打卡（逐日顯示）===== */
+  leaves.forEach(l=>{
+    let cur = l.start_date;
+
+    while(cur <= l.end_date){
+
+      if(month && !cur.startsWith(month)){
+        cur = new Date(new Date(cur).getTime()+86400000)
+                .toISOString().slice(0,10);
+        continue;
+      }
+
+      const key = `${l.name}_${cur}`;
+
+      if(!shown.has(key)){
+        html += `
+          <tr class="leaveOnly">
+            <td>${cur}</td>
+            <td>${l.name}</td>
+            <td>請假</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td>${l.type}</td>
+            <td>${l.start_date} ~ ${l.end_date}</td>
+            <td>
+              <input type="checkbox"
+                ${l.approved==1?"checked":""}
+                onchange="approve(${l.id},this.checked)">
+            </td>
+          </tr>
+        `;
+      }
+
+      cur = new Date(new Date(cur).getTime()+86400000)
+              .toISOString().slice(0,10);
+    }
+  });
+
+  tbl.innerHTML = html;
+}
+
+/* ===== 啟動 ===== */
 load();
 </script>
 

@@ -1,19 +1,117 @@
-<!DOCTYPE html><html><head><meta charset="utf-8"><title>請假</title></head>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>請假申請</title>
+
+<style>
+body{
+  background:#3f3f3f;
+  font-family:system-ui;
+}
+.card{
+  width:320px;
+  margin:40px auto;
+  background:#f4f4f4;
+  padding:16px;
+  border-radius:10px;
+}
+input,select,button,textarea{
+  width:100%;
+  padding:8px;
+  margin:6px 0;
+}
+button{
+  cursor:pointer;
+}
+.log{
+  background:#000;
+  color:#0f0;
+  font-size:12px;
+  height:120px;
+  overflow:auto;
+  padding:6px;
+}
+</style>
+</head>
+
 <body>
-姓名 <input id="name">
-日期 <input type="date" id="date">
-<select id="type"><option>全天</option><option>半天</option></select>
-原因 <input id="reason">
-<button onclick="send()">送出</button>
-<pre id="debug"></pre>
+
+<div class="card">
+  <h3>請假申請</h3>
+
+  <input id="name" placeholder="姓名">
+
+  <select id="type">
+    <option value="">請選擇假別</option>
+    <option>婚假</option>
+    <option>喪假</option>
+    <option>育兒假</option>
+    <option>生產假</option>
+    <option>病假</option>
+    <option>特休</option>
+  </select>
+
+  <label>開始日期</label>
+  <input type="date" id="start">
+
+  <label>結束日期</label>
+  <input type="date" id="end">
+
+  <textarea id="reason" placeholder="請假原因（選填）"></textarea>
+
+  <button onclick="submitLeave()">送出申請</button>
+
+  <div id="log" class="log"></div>
+</div>
 
 <script>
-const API="https://punch-api.jackey1688.workers.dev";
-async function send(){
-  const p={name:name.value,date:date.value,type:type.value,reason:reason.value,time:new Date().toISOString()};
-  debug.textContent=JSON.stringify(p,null,2);
-  await fetch(API+"/api/leave",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
-  alert("完成");
+const API = "https://punch-api.jackey1688.workers.dev/api/leave";
+const logBox = document.getElementById("log");
+
+function log(msg){
+  logBox.innerHTML += msg + "<br>";
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+async function submitLeave(){
+
+  // ✅ 正確取 DOM（避免 ReferenceError）
+  const nameEl   = document.getElementById("name");
+  const typeEl   = document.getElementById("type");
+  const startEl  = document.getElementById("start");
+  const endEl    = document.getElementById("end");
+  const reasonEl = document.getElementById("reason");
+
+  const name   = nameEl.value.trim();
+  const type   = typeEl.value;
+  const start  = startEl.value;
+  const end    = endEl.value;
+  const reason = reasonEl.value.trim();
+
+  if(!name || !type || !start || !end){
+    alert("請填寫姓名、假別、開始與結束日期");
+    return;
+  }
+
+  log("📤 送出請假申請中…");
+
+  await fetch(API,{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({
+      name,
+      type,
+      start_date: start,
+      end_date: end,
+      reason
+    })
+  });
+
+  log("✅ 請假申請已成功送出");
 }
 </script>
-</body></html>
+
+</body>
+</html>
