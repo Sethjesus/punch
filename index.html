@@ -1,53 +1,133 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8">
-<title>員工打卡</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>人事打卡</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont;
+      background: #f5f6f8;
+      margin: 0;
+      padding: 20px;
+    }
+    h2 {
+      text-align: center;
+    }
+    .card {
+      max-width: 420px;
+      margin: auto;
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.1);
+    }
+    label {
+      display: block;
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      font-size: 16px;
+      margin-top: 5px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+    button {
+      width: 100%;
+      margin-top: 15px;
+      padding: 14px;
+      font-size: 18px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      color: #fff;
+    }
+    .btn-in { background: #2ecc71; }
+    .btn-out { background: #e74c3c; }
+    .btn-trip { background: #3498db; }
 
-<style>
-body { font-family: system-ui; padding:20px }
-label { display:block; margin-top:10px }
-button { margin-top:10px }
-#debug {
-  margin-top:20px;
-  background:#000;
-  color:#0f0;
-  padding:10px;
-  height:160px;
-  overflow:auto;
-  font-size:13px;
-}
-</style>
+    #status {
+      margin-top: 15px;
+      font-size: 14px;
+      text-align: center;
+    }
+  </style>
 </head>
+<body>
 
-<body data-page="index">
+  <div class="card">
+    <h2>📱 人事打卡</h2>
 
-<h2>員工打卡</h2>
+    <label>姓名</label>
+    <input id="name" placeholder="請輸入姓名" />
 
-<label>
-  姓名：
-  <input id="name">
-</label>
+    <button class="btn-in" onclick="punch('上班')">上班打卡</button>
+    <button class="btn-out" onclick="punch('下班')">下班打卡</button>
+    <button class="btn-trip" onclick="punch('出差')">出差打卡</button>
 
-<label>
-  動作：
-  <select id="action">
-    <option>上班</option>
-    <option>下班</option>
-    <option>出差</option>
-    <option>請假</option>
-  </select>
-</label>
+    <div id="status"></div>
+  </div>
 
-<button id="btnPunch">送出</button>
+<script>
+const API_URL = "https://punch-api.jackey1688.workers.dev/api/punch";
 
-<div id="msg"></div>
-<div id="gps"></div>
+function punch(action) {
+  const name = document.getElementById("name").value.trim();
+  const status = document.getElementById("status");
 
-<h3>DEBUG</h3>
-<pre id="debug"></pre>
+  if (!name) {
+    alert("請輸入姓名");
+    return;
+  }
 
-<script src="./work.js"></script>
+  status.innerText = "📡 取得定位中...";
+
+  if (!navigator.geolocation) {
+    alert("此裝置不支援 GPS");
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+
+      status.innerText = "⏳ 打卡送出中...";
+
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            action,
+            lat,
+            lng
+          })
+        });
+
+        const data = await res.json();
+
+        if (data.ok) {
+          status.innerText = `✅ ${action} 打卡成功`;
+        } else {
+          status.innerText = "❌ 打卡失敗：" + data.error;
+        }
+
+      } catch (e) {
+        status.innerText = "❌ API 連線失敗";
+      }
+    },
+    (err) => {
+      status.innerText = "❌ 無法取得 GPS（請開啟定位權限）";
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+}
+</script>
+
 </body>
 </html>
