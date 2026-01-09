@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>請假申請</title>
+<title>請假 / 加班 / 出差申請</title>
 
 <style>
 body{
@@ -11,20 +11,23 @@ body{
   font-family:system-ui;
 }
 .card{
-  width:320px;
+  width:360px;
   margin:40px auto;
   background:#f4f4f4;
   padding:16px;
   border-radius:10px;
 }
-input,select,button,textarea{
+input,select,button,textarea,label{
   width:100%;
   padding:8px;
   margin:6px 0;
+  box-sizing:border-box;
 }
-button{
-  cursor:pointer;
+.inline{
+  display:flex;
+  gap:6px;
 }
+button{ cursor:pointer; }
 .log{
   background:#000;
   color:#0f0;
@@ -33,35 +36,72 @@ button{
   overflow:auto;
   padding:6px;
 }
+hr{ margin:10px 0; }
+.badge{
+  display:inline-block;
+  padding:2px 6px;
+  border-radius:4px;
+  font-size:12px;
+  margin-bottom:6px;
+}
+.badge.ot{ background:#dff0ff; }
+.badge.trip{ background:#e8ffe8; }
 </style>
 </head>
 
 <body>
 
 <div class="card">
-  <h3>請假申請</h3>
+  <h3>請假 / 加班 / 出差申請</h3>
 
   <input id="name" placeholder="姓名">
 
   <select id="type">
-    <option value="">請選擇假別</option>
+    <option value="">請選擇類型</option>
     <option>婚假</option>
     <option>喪假</option>
     <option>育兒假</option>
     <option>生產假</option>
     <option>病假</option>
     <option>特休</option>
+    <option>加班</option>
+    <option>出差</option>
   </select>
 
   <label>開始日期</label>
-  <input type="date" id="start">
+  <input type="date" id="startDate">
+
+  <label>開始時間</label>
+  <input type="time" id="startTime" value="09:00">
 
   <label>結束日期</label>
-  <input type="date" id="end">
+  <input type="date" id="endDate">
 
-  <textarea id="reason" placeholder="請假原因（選填）"></textarea>
+  <label>結束時間</label>
+  <input type="time" id="endTime" value="18:00">
 
-  <button onclick="submitLeave()">送出申請</button>
+  <div id="tripBlock" style="display:none">
+    <hr>
+    <span class="badge trip">出差資訊</span>
+    <input id="tripPlace" placeholder="出差地點（例：台中 / 高雄 / 日本東京）">
+    <label>
+      <input type="checkbox" id="crossCity">
+      跨縣市 / 國外
+    </label>
+  </div>
+
+  <div id="otBlock" style="display:none">
+    <hr>
+    <span class="badge ot">加班資訊</span>
+    <label>
+      <input type="checkbox" id="isHoliday">
+      假日加班
+    </label>
+  </div>
+
+  <textarea id="reason" placeholder="補充說明（選填）"></textarea>
+
+  <button onclick="submitForm()">送出申請</button>
 
   <div id="log" class="log"></div>
 </div>
@@ -69,33 +109,53 @@ button{
 <script>
 const API = "https://punch-api.jackey1688.workers.dev/api/leave";
 const logBox = document.getElementById("log");
+const typeSel = document.getElementById("type");
+const tripBlock = document.getElementById("tripBlock");
+const otBlock = document.getElementById("otBlock");
+
+typeSel.onchange = ()=>{
+  tripBlock.style.display = typeSel.value === "出差" ? "block" : "none";
+  otBlock.style.display   = typeSel.value === "加班" ? "block" : "none";
+};
 
 function log(msg){
   logBox.innerHTML += msg + "<br>";
   logBox.scrollTop = logBox.scrollHeight;
 }
 
-async function submitLeave(){
+async function submitForm(){
 
-  // ✅ 正確取 DOM（避免 ReferenceError）
-  const nameEl   = document.getElementById("name");
-  const typeEl   = document.getElementById("type");
-  const startEl  = document.getElementById("start");
-  const endEl    = document.getElementById("end");
-  const reasonEl = document.getElementById("reason");
+  const name = document.getElementById("name").value.trim();
+  const type = typeSel.value;
+  const sd   = document.getElementById("startDate").value;
+  const st   = document.getElementById("startTime").value;
+  const ed   = document.getElementById("endDate").value;
+  const et   = document.getElementById("endTime").value;
+  const baseReason = document.getElementById("reason").value.trim();
 
-  const name   = nameEl.value.trim();
-  const type   = typeEl.value;
-  const start  = startEl.value;
-  const end    = endEl.value;
-  const reason = reasonEl.value.trim();
-
-  if(!name || !type || !start || !end){
-    alert("請填寫姓名、假別、開始與結束日期");
+  if(!name || !type || !sd || !st || !ed || !et){
+    alert("請填寫完整日期與時間");
     return;
   }
 
-  log("📤 送出請假申請中…");
+  let detail = `【${type}】\n開始：${sd} ${st}\n結束：${ed} ${et}`;
+
+  if(type === "出差"){
+    const place = document.getElementById("tripPlace").value.trim();
+    const cross = document.getElementById("crossCity").checked;
+    detail += `\n地點：${place || "未填"}\n${cross ? "跨縣市 / 國外" : "同縣市"}`;
+  }
+
+  if(type === "加班"){
+    const holiday = document.getElementById("isHoliday").checked;
+    detail += `\n${holiday ? "假日加班" : "平日加班"}`;
+  }
+
+  if(baseReason){
+    detail += `\n說明：${baseReason}`;
+  }
+
+  log("📤 送出申請中…");
 
   await fetch(API,{
     method:"POST",
@@ -103,13 +163,13 @@ async function submitLeave(){
     body: JSON.stringify({
       name,
       type,
-      start_date: start,
-      end_date: end,
-      reason
+      start_date: sd,
+      end_date: ed,
+      reason: detail
     })
   });
 
-  log("✅ 請假申請已成功送出");
+  log("✅ 申請已送出（含時間 / 出差 / 加班資訊）");
 }
 </script>
 

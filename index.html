@@ -1,58 +1,248 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>人事打卡</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UDM ESG｜上班打卡系統</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1e293b">
+<link rel="apple-touch-icon" href="icon-192.png">
+
 <style>
-body{background:#555;font-family:system-ui}
-.card{background:#f2f2f2;width:320px;margin:20px auto;padding:16px;border-radius:8px}
-input,button{width:100%;padding:8px;margin:6px 0}
-.log{background:#000;color:#0f0;height:150px;overflow:auto;font-size:12px;padding:6px}
+:root{
+  --bg:#0f172a;
+  --card:#f8fafc;
+  --primary:#2563eb;
+  --success:#16a34a;
+  --muted:#64748b;
+}
+body{
+  margin:0;
+  background:linear-gradient(180deg,#0f172a,#020617);
+  font-family:system-ui,-apple-system,BlinkMacSystemFont;
+}
+header{
+  background:linear-gradient(90deg,#020617,#1e293b);
+  color:#fff;
+  padding:16px;
+  text-align:center;
+}
+header h1{margin:0;font-size:20px}
+header div{font-size:12px;opacity:.85}
+
+.container{
+  max-width:420px;
+  margin:20px auto;
+  background:var(--card);
+  border-radius:18px;
+  padding:18px;
+  box-shadow:0 20px 40px rgba(0,0,0,.35);
+}
+
+/* 今日 */
+.today{text-align:center;margin-bottom:14px}
+.today .date{font-size:16px;font-weight:700}
+.today .week{font-size:13px;color:var(--muted)}
+
+/* 狀態 */
+.status{
+  background:#eef2ff;
+  padding:12px;
+  border-radius:14px;
+  margin-bottom:14px;
+  font-size:14px;
+}
+.status div{margin:4px 0}
+
+/* 打卡 */
+.actions{display:flex;gap:10px;margin-bottom:14px}
+button{
+  flex:1;
+  padding:14px;
+  border-radius:14px;
+  border:0;
+  font-size:15px;
+  font-weight:700;
+  cursor:pointer;
+}
+button:disabled{opacity:.4;cursor:not-allowed}
+.btn-in{background:var(--success);color:#fff}
+.btn-out{background:var(--primary);color:#fff}
+
+/* 次功能 */
+.sub{display:flex;gap:10px}
+.sub button{
+  padding:10px;
+  font-size:13px;
+  background:#334155;
+  color:#fff;
+}
+
+/* Log */
+.log{
+  margin-top:12px;
+  background:#020617;
+  color:#22c55e;
+  font-size:12px;
+  padding:10px;
+  border-radius:12px;
+  height:140px;
+  overflow:auto;
+}
 </style>
 </head>
+
 <body>
 
-<div class="card">
-  <h3>員工打卡</h3>
-  <input id="name" placeholder="請輸入姓名" />
-  <button onclick="punch('上班')">上班</button>
-  <button onclick="punch('下班')">下班</button>
-  <div id="log" class="log"></div>
+<header>
+  <h1>UDM ESG</h1>
+  <div>上班打卡系統</div>
+</header>
+
+<div class="container">
+
+  <!-- 今日 -->
+  <div class="today">
+    <div class="date" id="todayDate"></div>
+    <div class="week" id="todayWeek"></div>
+  </div>
+
+  <!-- 狀態 -->
+  <div class="status" id="statusBox">
+    讀取今日狀態中…
+  </div>
+
+  <!-- 打卡 -->
+  <div class="actions">
+    <button id="btnIn" class="btn-in" onclick="punch('上班')">上班打卡</button>
+    <button id="btnOut" class="btn-out" onclick="punch('下班')">下班打卡</button>
+  </div>
+
+  <!-- 次功能 -->
+  <div class="sub">
+    <button onclick="location.href='Leave.html'">📝 請假 / 出差 / 加班</button>
+    <button onclick="location.href='HR.html'">📊 HR 總覽</button>
+  </div>
+
+  <!-- Log -->
+  <div class="log" id="log"></div>
 </div>
 
 <script>
-const API = "https://punch-api.jackey1688.workers.dev/api/punch";
-const company = { lat:25.00657, lng:121.48416 };
-const logBox = document.getElementById("log");
-const nameInput = document.getElementById("name");
+/* ===== API ===== */
+const API_PUNCH = "https://punch-api.jackey1688.workers.dev/api/punch";
+const API_REC   = "https://punch-api.jackey1688.workers.dev/api/records";
 
-function log(t){ logBox.innerHTML+=t+"<br>"; logBox.scrollTop=logBox.scrollHeight; }
-function dist(a,b,c,d){
-  const R=6371000,toRad=x=>x*Math.PI/180;
-  const dLat=toRad(c-a), dLng=toRad(d-b);
-  const s=Math.sin(dLat/2)**2+
-    Math.cos(toRad(a))*Math.cos(toRad(c))*Math.sin(dLng/2)**2;
-  return Math.round(2*R*Math.asin(Math.sqrt(s)));
+/* ===== 公司座標 ===== */
+const COMPANY_LAT = 25.00657;
+const COMPANY_LNG = 121.48416;
+
+/* ===== 2026 國定連假 ===== */
+const HOLIDAYS = [
+  { start:"2026-02-14", end:"2026-02-22", name:"農曆春節" },
+  { start:"2026-02-27", end:"2026-03-01", name:"228 連假" },
+  { start:"2026-04-03", end:"2026-04-06", name:"清明連假" },
+  { start:"2026-05-01", end:"2026-05-03", name:"勞動節連假" },
+  { start:"2026-06-19", end:"2026-06-21", name:"端午連假" },
+  { start:"2026-09-25", end:"2026-09-28", name:"中秋 / 教師節" },
+  { start:"2026-10-09", end:"2026-10-11", name:"國慶連假" },
+  { start:"2026-10-24", end:"2026-10-26", name:"光復節" },
+  { start:"2026-12-25", end:"2026-12-27", name:"行憲紀念日" }
+];
+
+/* ===== DOM ===== */
+const logBox = document.getElementById("log");
+const statusBox = document.getElementById("statusBox");
+const btnIn = document.getElementById("btnIn");
+const btnOut = document.getElementById("btnOut");
+
+/* ===== 使用者 ===== */
+const name = localStorage.getItem("name") || prompt("請輸入姓名");
+localStorage.setItem("name", name);
+
+/* ===== 今日 ===== */
+const now = new Date();
+const today = now.toISOString().slice(0,10);
+const map = ["日","一","二","三","四","五","六"];
+document.getElementById("todayDate").innerText = today;
+document.getElementById("todayWeek").innerText = "週" + map[now.getDay()];
+
+/* ===== 工具 ===== */
+function log(t){
+  logBox.innerHTML += t + "<br>";
+  logBox.scrollTop = logBox.scrollHeight;
+}
+function distanceMeter(lat1,lng1,lat2,lng2){
+  const R=6371000;
+  const dLat=(lat2-lat1)*Math.PI/180;
+  const dLng=(lng2-lng1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+
+    Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+    Math.sin(dLng/2)**2;
+  return Math.round(R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));
 }
 
-function punch(action){
-  if(!nameInput.value.trim()){ alert("請輸入姓名"); return; }
-  log("📡 取得 GPS…");
-  navigator.geolocation.getCurrentPosition(async p=>{
-    const lat=p.coords.latitude, lng=p.coords.longitude;
-    const d=dist(lat,lng,company.lat,company.lng);
-    log(`👤 ${nameInput.value}`);
-    log(`📍 ${lat}, ${lng}`);
-    log(`🏢 距公司 ${d} 公尺`);
-    await fetch(API,{
+/* ===== 今日狀態 ===== */
+async function loadStatus(){
+  const data = await (await fetch(API_REC)).json();
+  let hasIn=false,hasOut=false,inTime="",outTime="";
+
+  data.forEach(r=>{
+    if(r.name===name && r.created_at_tw?.startsWith(today)){
+      if(r.action==="上班"){hasIn=true;inTime=r.created_at_tw.slice(11,19);}
+      if(r.action==="下班"){hasOut=true;outTime=r.created_at_tw.slice(11,19);}
+    }
+  });
+
+  btnIn.disabled = hasIn;
+  btnOut.disabled = !hasIn || hasOut;
+
+  let notice = "";
+  const day = now.getDay();
+  let holiday = "";
+  for(const h of HOLIDAYS){
+    if(today>=h.start && today<=h.end){holiday=h.name;break;}
+  }
+  if(holiday) notice = `🎌 今日為 ${holiday}<br>`;
+  else if(day===0||day===6) notice = `🔴 今日為週末（週${day===0?"日":"六"}）<br>`;
+
+  statusBox.innerHTML = notice +
+    `🟢 上班：${hasIn?inTime:"尚未打卡"}<br>
+     🔵 下班：${hasOut?outTime:"—"}`;
+}
+loadStatus();
+
+/* ===== 打卡 ===== */
+async function punch(action){
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const lat=pos.coords.latitude;
+    const lng=pos.coords.longitude;
+    const dist=distanceMeter(COMPANY_LAT,COMPANY_LNG,lat,lng);
+    const km=(dist*2)/1000;
+    const co2=(km*0.2).toFixed(2);
+
+    log(`📤 送出 ${action} 打卡…`);
+
+    await fetch(API_PUNCH,{
       method:"POST",
       headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ name:nameInput.value.trim(), action, lat, lng })
+      body:JSON.stringify({ name, action, lat, lng })
     });
-    log("✅ 打卡成功");
-  },e=>log("❌ GPS 失敗："+e.message),{enableHighAccuracy:true});
+
+    log(`✅ ${action} 成功｜距公司 ${dist} m${dist>200?" ⚠":""}`);
+    log(`🌱 通勤碳排估算：約 ${co2} kg CO₂`);
+
+    loadStatus();
+  });
+}
+
+/* ===== PWA ===== */
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("./sw.js");
 }
 </script>
+
 </body>
 </html>
