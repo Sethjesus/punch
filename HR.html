@@ -13,6 +13,189 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <style>
+  /* =====================================================
+   UDM ESG HR System – Unified CSS + Z-Index Architecture
+   ===================================================== */
+
+/* ===== Global Layer Definition ===== */
+:root{
+  /* Base */
+  --z-base: 1;
+
+  /* Map */
+  --z-map: 100;
+
+  /* Page UI */
+  --z-header: 200;
+  --z-toolbar: 210;
+  --z-table: 220;
+
+  /* Floating */
+  --z-float: 500;
+
+  /* Modal System */
+  --z-modal-backdrop: 9000;
+  --z-modal: 9010;
+
+  /* Critical */
+  --z-login: 10000;
+  --z-alert: 11000;
+
+  /* Theme */
+  --bg:#2f2f3a;
+  --card:#f4f6f8;
+  --header:#1f2937;
+}
+
+/* ===== Reset ===== */
+*{ box-sizing:border-box }
+body{
+  margin:0;
+  background:var(--bg);
+  font-family:system-ui;
+}
+
+/* ===== Header ===== */
+header{
+  background:var(--header);
+  color:#fff;
+  padding:14px;
+  text-align:center;
+  position:sticky;
+  top:0;
+  z-index:var(--z-header);
+}
+header h1{margin:0;font-size:20px}
+header div{font-size:13px;opacity:.85}
+
+/* ===== Layout ===== */
+.container{
+  max-width:1600px;
+  margin:20px auto;
+  background:var(--card);
+  border-radius:12px;
+  padding:16px;
+  position:relative;
+  z-index:var(--z-base);
+}
+
+/* ===== Toolbar ===== */
+.toolbar{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  align-items:center;
+  margin-bottom:10px;
+  position:relative;
+  z-index:var(--z-toolbar);
+}
+
+/* ===== Buttons ===== */
+button{
+  padding:6px 12px;
+  border:0;
+  border-radius:8px;
+  cursor:pointer;
+}
+.primary{background:#3498db;color:#fff}
+.excel{background:#27ae60;color:#fff}
+
+/* ===== Table ===== */
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:14px;
+  position:relative;
+  z-index:var(--z-table);
+}
+th,td{
+  border-bottom:1px solid #d1d5db;
+  padding:6px;
+  text-align:center;
+  vertical-align:top;
+}
+th{
+  background:#e5e7eb;
+  position:sticky;
+  top:0;
+  z-index:var(--z-header);
+}
+
+/* ===== Row States ===== */
+.leaveOnly{background:#fff4cc}
+.tripRow{background:#e8ffe8}
+.otRow{background:#eaf4ff}
+
+/* ===== Weekend / Holiday ===== */
+.weekendRow{ background:#ffecec }
+.weekendText{ color:#c0392b; font-weight:bold }
+.holidayRow{ background:#fff8d6 }
+.holidayText{ color:#d35400; font-weight:bold }
+
+/* ===== Distance Alert ===== */
+.far{
+  background:#c0392b;
+  color:#fff;
+  font-weight:bold;
+}
+
+/* ===== Login Overlay (CRITICAL FIX) ===== */
+.loginMask{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.7);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:var(--z-login);
+}
+.loginBox{
+  background:#fff;
+  padding:20px;
+  border-radius:12px;
+  width:260px;
+  text-align:center;
+}
+.loginBox input{
+  width:100%;
+  padding:8px;
+  margin:8px 0;
+}
+
+/* ===== Modal System (Future HR Approval) ===== */
+.modalBackdrop{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.5);
+  z-index:var(--z-modal-backdrop);
+}
+.modalBox{
+  position:fixed;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:var(--z-modal);
+}
+
+/* ===== Leaflet Mini Map ===== */
+.miniMap{
+  width:180px;
+  height:120px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  overflow:hidden;
+  margin-top:4px;
+  position:relative;
+  z-index:var(--z-map);
+}
+
+/* ===== Utility ===== */
+.small{
+  font-size:11px;
+  opacity:.9;
+}
+
 :root{
   --bg:#2f2f3a;
   --card:#f4f6f8;
