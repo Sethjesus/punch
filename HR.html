@@ -3,7 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>UDM ESG｜人資上班請假系統</title>
+<title>UDM ESG｜人資上班請假系統（HR）</title>
+
+<!-- Leaflet (免 Google / 免 API Key) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- SheetJS (匯出 .xlsx) -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <style>
 :root{
@@ -53,6 +60,7 @@ th,td{
   border-bottom:1px solid #d1d5db;
   padding:6px;
   text-align:center;
+  vertical-align:top;
 }
 th{
   background:#e5e7eb;
@@ -72,7 +80,12 @@ th{
 .holidayRow{ background:#fff8d6 }
 .holidayText{ color:#d35400; font-weight:bold }
 
-.red{color:#c0392b;font-weight:bold}
+/* 距離 > 20m */
+.far{
+  background:#c0392b;
+  color:#fff;
+  font-weight:bold;
+}
 
 /* Login */
 .loginMask{
@@ -96,6 +109,17 @@ th{
   padding:8px;
   margin:8px 0;
 }
+
+/* Leaflet mini map */
+.miniMap{
+  width:180px;
+  height:120px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  overflow:hidden;
+  margin-top:4px;
+}
+.small{font-size:11px;opacity:.9}
 </style>
 </head>
 
@@ -112,7 +136,7 @@ th{
 
 <header>
   <h1>UDM ESG</h1>
-  <div>人資上班請假系統</div>
+  <div>人資上班請假系統（HR）</div>
 </header>
 
 <div class="container">
@@ -120,30 +144,38 @@ th{
     📅 月份：
     <input type="month" id="monthPicker">
     <button class="primary" onclick="drawTable()">重新整理</button>
-    <button class="excel" onclick="exportExcel()">匯出 Excel</button>
+    <button class="excel" onclick="exportExcel()">匯出 Excel（.xlsx）</button>
   </div>
 
   <table id="tbl"></table>
 </div>
 
 <script>
-/* ===== Login ===== */
+/* =====================
+   Login
+===================== */
 function login(){
   if(document.getElementById("pwd").value==="1234"){
     document.getElementById("loginMask").style.display="none";
   }else alert("密碼錯誤");
 }
 
-/* ===== API ===== */
-const API_ATT="https://punch-api.jackey1688.workers.dev/api/records";
-const API_LEAVE="https://punch-api.jackey1688.workers.dev/api/leave";
-const API_APP="https://punch-api.jackey1688.workers.dev/api/leave/approve";
+/* =====================
+   API
+===================== */
+const API_ATT   = "https://punch-api.jackey1688.workers.dev/api/records";
+const API_LEAVE = "https://punch-api.jackey1688.workers.dev/api/leave";
+const API_APP   = "https://punch-api.jackey1688.workers.dev/api/leave/approve";
 
-/* ===== 公司座標 ===== */
-const COMPANY_LAT=25.00657;
-const COMPANY_LNG=121.48416;
+/* =====================
+   公司座標
+===================== */
+const COMPANY_LAT = 25.00657;
+const COMPANY_LNG = 121.48416;
 
-/* ===== 2026 國定連假（區間）===== */
+/* =====================
+   2026 國定連假（區間）
+===================== */
 const HOLIDAY_RANGES = [
   { start:"2026-02-14", end:"2026-02-22", name:"農曆春節連假" },
   { start:"2026-02-27", end:"2026-03-01", name:"228連假" },
@@ -156,17 +188,21 @@ const HOLIDAY_RANGES = [
   { start:"2026-12-25", end:"2026-12-27", name:"行憲紀念日連假" }
 ];
 
-let records=[],leaves=[];
-const tbl=document.getElementById("tbl");
-const mp=document.getElementById("monthPicker");
-mp.value=new Date().toISOString().slice(0,7);
+let records = [];
+let leaves  = [];
 
-/* ===== Utils ===== */
+const tbl = document.getElementById("tbl");
+const mp  = document.getElementById("monthPicker");
+mp.value = new Date().toISOString().slice(0,7);
+
+/* =====================
+   Utils
+===================== */
 function distanceMeter(lat1,lng1,lat2,lng2){
   const R=6371000;
   const dLat=(lat2-lat1)*Math.PI/180;
   const dLng=(lng2-lng1)*Math.PI/180;
-  const a=Math.sin(dLat/2)**2+
+  const a=Math.sin(dLat/2)**2 +
     Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
     Math.sin(dLng/2)**2;
   return Math.round(R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));
@@ -175,8 +211,8 @@ function distanceMeter(lat1,lng1,lat2,lng2){
 function parseDetail(r){
   if(!r) return "";
   return r.replace(/\n/g,"<br>")
-    .replace(/【加班】/g,"<b style=color:#2980b9>【加班】</b>")
-    .replace(/【出差】/g,"<b style=color:#27ae60>【出差】</b>");
+    .replace(/【加班】/g,'<b style="color:#2980b9">【加班】</b>')
+    .replace(/【出差】/g,'<b style="color:#27ae60">【出差】</b>');
 }
 
 function weekdayInfo(dateStr){
@@ -208,18 +244,54 @@ function weekdayInfo(dateStr){
   };
 }
 
-/* ===== Load ===== */
+function nextDateStr(yyyy_mm_dd){
+  const t = new Date(yyyy_mm_dd).getTime() + 86400000;
+  return new Date(t).toISOString().slice(0,10);
+}
+
+/* =====================
+   Load
+===================== */
 async function load(){
-  records=await (await fetch(API_ATT)).json();
-  leaves=await (await fetch(API_LEAVE)).json();
+  records = await (await fetch(API_ATT)).json();
+  leaves  = await (await fetch(API_LEAVE)).json();
   drawTable();
 }
 load();
 
-/* ===== Draw ===== */
+/* =====================
+   Leaflet mini-maps
+===================== */
+let mapQueue = []; // {id, lat, lng, dist}
+function buildMiniMap(id, lat, lng){
+  const map = L.map(id, { zoomControl:false, attributionControl:false, dragging:false, scrollWheelZoom:false, doubleClickZoom:false, boxZoom:false, keyboard:false, tap:false })
+              .setView([COMPANY_LAT, COMPANY_LNG], 18);
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
+
+  // 公司點
+  L.circleMarker([COMPANY_LAT, COMPANY_LNG], { radius:6, color:"#1f77b4", fillColor:"#1f77b4", fillOpacity:1 })
+    .addTo(map)
+    .bindTooltip("公司", {permanent:false});
+
+  // 20m 半徑圈
+  L.circle([COMPANY_LAT, COMPANY_LNG], { radius:20, color:"#1f77b4", fillColor:"#1f77b4", fillOpacity:0.2 })
+    .addTo(map);
+
+  // 打卡點
+  L.circleMarker([lat, lng], { radius:6, color:"#c0392b", fillColor:"#e74c3c", fillOpacity:1 })
+    .addTo(map);
+}
+
+/* =====================
+   Draw
+===================== */
 function drawTable(){
-  let month=mp.value||"";
-  let html=`
+  const month = mp.value || "";
+  mapQueue = [];
+  let mapIdx = 0;
+
+  let html = `
   <tr>
     <th>日期</th>
     <th>星期</th>
@@ -227,108 +299,277 @@ function drawTable(){
     <th>類型</th>
     <th>上班</th>
     <th>下班</th>
-    <th>GPS</th>
+    <th>GPS / 地圖</th>
     <th>距公司(m)</th>
     <th>申請類型</th>
     <th>期間</th>
     <th>詳細</th>
     <th>核准</th>
   </tr>`;
-  const shown=new Set();
+
+  const shown = new Set();
 
   /* ===== 打卡 ===== */
   records.forEach(r=>{
-    const date=r.created_at_tw?.slice(0,10);
+    const date = r.created_at_tw?.slice(0,10);
     if(!date) return;
     if(month && !date.startsWith(month)) return;
 
-    const w=weekdayInfo(date);
+    const w = weekdayInfo(date);
     const rowCls = w.isHoliday ? "holidayRow" : w.isWeekend ? "weekendRow" : "";
     const textCls = w.isHoliday ? "holidayText" : w.isWeekend ? "weekendText" : "";
 
-    const time=r.created_at_tw.slice(11,19);
-    const key=r.name+"_"+date;
+    const time = r.created_at_tw.slice(11,19);
+    const key  = r.name + "_" + date + "_" + r.action; // 同日上下班各一筆
     shown.add(key);
 
-    const leave=leaves.find(l=>l.name===r.name &&
-      date>=l.start_date && date<=l.end_date);
+    const leave = leaves.find(l => l.name===r.name && date>=l.start_date && date<=l.end_date);
 
-    let dist="",gps="";
-    if(r.lat&&r.lng){
-      dist=distanceMeter(COMPANY_LAT,COMPANY_LNG,r.lat,r.lng);
-      gps=`<a target="_blank" href="https://maps.google.com/?q=${r.lat},${r.lng}">
-        ${r.lat.toFixed(5)},${r.lng.toFixed(5)}</a>`;
+    let dist = "";
+    let gpsCell = "";
+
+    if(r.lat && r.lng){
+      const d = distanceMeter(COMPANY_LAT, COMPANY_LNG, r.lat, r.lng);
+      dist = d;
+
+      const mapId = "map_" + (++mapIdx);
+      gpsCell = `
+        <div class="small">${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}</div>
+        <div id="${mapId}" class="miniMap"></div>
+      `;
+      mapQueue.push({ id: mapId, lat: r.lat, lng: r.lng });
+    }else{
+      gpsCell = "";
     }
 
-    html+=`
+    html += `
     <tr class="${rowCls}">
       <td>${date}</td>
-      <td class="${textCls}">${w.label}</td>
+      <td class="${textCls}" title="${w.holidayName||''}">${w.label}${w.holidayName?("｜"+w.holidayName):""}</td>
       <td>${r.name}</td>
       <td>${r.action}</td>
-      <td>${r.action==="上班"?time:""}</td>
-      <td>${r.action==="下班"?time:""}</td>
-      <td>${gps}</td>
-      <td class="${dist>200?'red':''}">${dist||""}</td>
-      <td>${leave?leave.type:""}</td>
-      <td>${leave?leave.start_date+" ~ "+leave.end_date:""}</td>
-      <td>${leave?parseDetail(leave.reason):""}</td>
-      <td>${leave?`<input type="checkbox" ${leave.approved?"checked":""}
-        onchange="fetch(API_APP,{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({id:${leave.id},approved:this.checked?1:0})})">`:""}</td>
+      <td>${r.action==="上班" ? time : ""}</td>
+      <td>${r.action==="下班" ? time : ""}</td>
+      <td>${gpsCell}</td>
+      <td class="${dist!=="" && dist>20 ? "far" : ""}">${dist!=="" ? dist : ""}</td>
+      <td>${leave ? leave.type : ""}</td>
+      <td>${leave ? (leave.start_date + " ~ " + leave.end_date) : ""}</td>
+      <td>${leave ? parseDetail(leave.reason) : ""}</td>
+      <td>${leave ? `
+        <input type="checkbox" ${leave.approved ? "checked" : ""}
+          onchange="approveLeave(${leave.id}, this.checked)">
+      ` : ""}</td>
     </tr>`;
   });
 
   /* ===== 只有申請（沒打卡）===== */
   leaves.forEach(l=>{
-    let cur=l.start_date;
-    while(cur<=l.end_date){
+    let cur = l.start_date;
+    while(cur <= l.end_date){
       if(month && !cur.startsWith(month)){
-        cur=new Date(new Date(cur).getTime()+86400000).toISOString().slice(0,10);
+        cur = nextDateStr(cur);
         continue;
       }
-      const key=l.name+"_"+cur;
-      if(!shown.has(key)){
-        const w=weekdayInfo(cur);
-        const baseCls=l.type==="出差"?"tripRow":l.type==="加班"?"otRow":"leaveOnly";
-        const rowCls = w.isHoliday ? "holidayRow" : w.isWeekend ? "weekendRow" : baseCls;
+
+      // 若同日有上/下班記錄，仍要顯示申請行嗎？目前：只要當天沒有任何打卡(上/下班)就顯示申請
+      const keyIn  = l.name + "_" + cur + "_上班";
+      const keyOut = l.name + "_" + cur + "_下班";
+
+      if(!shown.has(keyIn) && !shown.has(keyOut)){
+        const w = weekdayInfo(cur);
+        const baseCls = l.type==="出差" ? "tripRow" : l.type==="加班" ? "otRow" : "leaveOnly";
+        const rowCls  = w.isHoliday ? "holidayRow" : w.isWeekend ? "weekendRow" : baseCls;
         const textCls = w.isHoliday ? "holidayText" : w.isWeekend ? "weekendText" : "";
 
-        html+=`
+        html += `
         <tr class="${rowCls}">
           <td>${cur}</td>
-          <td class="${textCls}">${w.label}</td>
+          <td class="${textCls}" title="${w.holidayName||''}">${w.label}${w.holidayName?("｜"+w.holidayName):""}</td>
           <td>${l.name}</td>
           <td>申請</td>
-          <td></td><td></td><td></td><td></td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td></td>
           <td>${l.type}</td>
           <td>${l.start_date} ~ ${l.end_date}</td>
           <td>${parseDetail(l.reason)}</td>
-          <td><input type="checkbox" ${l.approved?"checked":""}
-            onchange="fetch(API_APP,{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({id:${l.id},approved:this.checked?1:0})})"></td>
+          <td>
+            <input type="checkbox" ${l.approved ? "checked" : ""}
+              onchange="approveLeave(${l.id}, this.checked)">
+          </td>
         </tr>`;
       }
-      cur=new Date(new Date(cur).getTime()+86400000).toISOString().slice(0,10);
+
+      cur = nextDateStr(cur);
     }
   });
 
-  tbl.innerHTML=html;
+  tbl.innerHTML = html;
+
+  // 等 DOM 插入後再建地圖
+  setTimeout(()=>{
+    mapQueue.forEach(m => {
+      const el = document.getElementById(m.id);
+      if(el) buildMiniMap(m.id, m.lat, m.lng);
+    });
+  }, 0);
 }
 
-/* ===== Excel ===== */
-function exportExcel(){
-  let csv="UDM ESG\n人資上班請假系統\n\n日期,星期,姓名,類型,上班,下班,申請類型,期間,詳細\n";
-  document.querySelectorAll("#tbl tr").forEach((r,i)=>{
-    if(i===0) return;
-    const c=[...r.children].map(td=>td.innerText.replace(/\n/g," "));
-    csv+=c.slice(0,9).join(",")+"\n";
+/* =====================
+   Approve
+===================== */
+async function approveLeave(id, checked){
+  await fetch(API_APP,{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ id, approved: checked ? 1 : 0 })
   });
-  const blob=new Blob([csv],{type:"text/csv"});
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(blob);
-  a.download="UDM_ESG_HR_2026.csv";
-  a.click();
+}
+
+/* =====================
+   Excel helpers
+===================== */
+function isHoliday(dateStr){
+  for(const h of HOLIDAY_RANGES){
+    if(dateStr>=h.start && dateStr<=h.end) return true;
+  }
+  return false;
+}
+function isWeekend(dateStr){
+  const d = new Date(dateStr);
+  const day = d.getDay();
+  return day===0 || day===6;
+}
+function applyFill(cell, rgb){
+  cell.s = cell.s || {};
+  cell.s.fill = { fgColor:{ rgb } };
+}
+function applyFarStyle(cell){
+  cell.s = cell.s || {};
+  cell.s.fill = { fgColor:{ rgb:"C0392B" } };
+  cell.s.font = { color:{ rgb:"FFFFFF" }, bold:true };
+}
+
+/* =====================
+   Excel export (.xlsx)
+   - 每人一張 Sheet
+   - 國定假日/週末底色
+   - 距離 >20m 紅底
+   - Daily Summary: 最早上班/最晚下班/最遠距離
+===================== */
+function exportExcel(){
+  const wb = XLSX.utils.book_new();
+
+  // 先從目前表格抓資料（和畫面一致）
+  const rowsAll = [];
+  document.querySelectorAll("#tbl tr").forEach((tr,i)=>{
+    if(i===0) return;
+    const tds = [...tr.children];
+    // 12 欄
+    const row = tds.map(td => td.innerText.replace(/\n/g," ").trim());
+    rowsAll.push(row);
+  });
+
+  // 依姓名分組
+  const people = {};
+  rowsAll.forEach(r=>{
+    const name = r[2] || "";
+    if(!people[name]) people[name] = [];
+    people[name].push(r);
+  });
+
+  // 每人 sheet
+  Object.keys(people).forEach(name=>{
+    const header = ["日期","星期","姓名","類型","上班","下班","GPS / 地圖","距公司(m)","申請類型","期間","詳細","核准"];
+    const aoa = [header, ...people[name]];
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"] = [
+      {wch:12},{wch:16},{wch:10},{wch:6},
+      {wch:8},{wch:8},{wch:20},{wch:12},
+      {wch:10},{wch:22},{wch:30},{wch:6}
+    ];
+
+    // 逐列套色：假日/週末 + >20m
+    for(let i=2;i<=aoa.length;i++){
+      const dateCell = ws["A"+i];
+      if(!dateCell) continue;
+      const dateStr = String(dateCell.v);
+
+      const holiday = isHoliday(dateStr);
+      const weekend = isWeekend(dateStr);
+
+      if(holiday || weekend){
+        const rgb = holiday ? "FFF4CC" : "FFECEC";
+        ["A","B","C","D","E","F","G","H","I","J","K","L"].forEach(c=>{
+          const cell = ws[c+i];
+          if(cell) applyFill(cell, rgb);
+        });
+      }
+
+      const distCell = ws["H"+i];
+      if(distCell && Number(distCell.v)>20){
+        applyFarStyle(distCell);
+      }
+    }
+
+    XLSX.utils.book_append_sheet(wb, ws, String(name).substring(0,31) || "未命名");
+  });
+
+  // Daily Summary
+  // 日期 | 姓名 | 最早上班 | 最晚下班 | 最遠距離(m)
+  const summary = {};
+  rowsAll.forEach(r=>{
+    const date = r[0];
+    const name = r[2];
+    const type = r[3];
+    const inTime = r[4];
+    const outTime = r[5];
+    const dist = Number(r[7]) || 0;
+
+    const key = date + "_" + name;
+    if(!summary[key]) summary[key] = { date, name, earliest:"", latest:"", maxDist:0 };
+
+    if(type==="上班" && inTime){
+      if(!summary[key].earliest || inTime < summary[key].earliest) summary[key].earliest = inTime;
+    }
+    if(type==="下班" && outTime){
+      if(!summary[key].latest || outTime > summary[key].latest) summary[key].latest = outTime;
+    }
+    summary[key].maxDist = Math.max(summary[key].maxDist, dist);
+  });
+
+  const sumAoa = [["日期","姓名","最早上班","最晚下班","最遠距離(m)"]];
+  Object.values(summary).forEach(v=>{
+    sumAoa.push([v.date, v.name, v.earliest, v.latest, v.maxDist]);
+  });
+
+  const wsSum = XLSX.utils.aoa_to_sheet(sumAoa);
+  wsSum["!cols"] = [{wch:12},{wch:10},{wch:10},{wch:10},{wch:14}];
+
+  for(let i=2;i<=sumAoa.length;i++){
+    const dateStr = String(wsSum["A"+i]?.v || "");
+    const holiday = isHoliday(dateStr);
+    const weekend = isWeekend(dateStr);
+    if(holiday || weekend){
+      const rgb = holiday ? "FFF4CC" : "FFECEC";
+      ["A","B","C","D","E"].forEach(c=>{
+        const cell = wsSum[c+i];
+        if(cell) applyFill(cell, rgb);
+      });
+    }
+
+    const cellE = wsSum["E"+i];
+    if(cellE && Number(cellE.v)>20){
+      applyFarStyle(cellE);
+    }
+  }
+
+  XLSX.utils.book_append_sheet(wb, wsSum, "Daily Summary");
+
+  const ym = document.getElementById("monthPicker").value || "ALL";
+  XLSX.writeFile(wb, `UDM_ESG_HR_${ym}.xlsx`);
 }
 </script>
 
