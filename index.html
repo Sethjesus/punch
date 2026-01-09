@@ -169,6 +169,9 @@ const API_REC="https://punch-api.jackey1688.workers.dev/api/records";
 const COMPANY_LAT=25.00657;
 const COMPANY_LNG=121.48416;
 
+/* ===== 二次機會設定 ===== */
+const MAX_PUNCH_PER_DAY = 2;
+
 /* ===== 國定假日 ===== */
 const HOLIDAYS=[
  {start:"2026-02-14",end:"2026-02-22",name:"農曆春節"},
@@ -188,21 +191,20 @@ const statusBox=document.getElementById("statusBox");
 const btnIn=document.getElementById("btnIn");
 const btnOut=document.getElementById("btnOut");
 
-/* ===== 姓名（可修改）===== */
+/* ===== 姓名 ===== */
 let name=localStorage.getItem("name");
 if(!name){
   name=prompt("請輸入姓名");
   localStorage.setItem("name",name);
 }
-const userNameEl=document.getElementById("userName");
-userNameEl.innerText=name;
+document.getElementById("userName").innerText=name;
 
 function editName(){
   const newName=prompt("請輸入新的姓名",name);
   if(!newName) return;
   name=newName.trim();
   localStorage.setItem("name",name);
-  userNameEl.innerText=name;
+  document.getElementById("userName").innerText=name;
   log(`👤 已切換使用者：${name}`);
 }
 
@@ -228,18 +230,25 @@ function distanceMeter(lat1,lng1,lat2,lng2){
   return Math.round(R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));
 }
 
-/* ===== 狀態 ===== */
+/* ===== 狀態（含次數）===== */
+let todayInCount=0;
+let todayOutCount=0;
+
 async function loadStatus(){
   const data=await(await fetch(API_REC)).json();
-  let hasIn=false,hasOut=false,inTime="",outTime="";
+  todayInCount=0;
+  todayOutCount=0;
+  let inTime="",outTime="";
+
   data.forEach(r=>{
     if(r.name===name&&r.created_at_tw?.startsWith(today)){
-      if(r.action==="上班"){hasIn=true;inTime=r.created_at_tw.slice(11,19);}
-      if(r.action==="下班"){hasOut=true;outTime=r.created_at_tw.slice(11,19);}
+      if(r.action==="上班"){todayInCount++; inTime=r.created_at_tw.slice(11,19);}
+      if(r.action==="下班"){todayOutCount++; outTime=r.created_at_tw.slice(11,19);}
     }
   });
-  btnIn.disabled=hasIn;
-  btnOut.disabled=!hasIn||hasOut;
+
+  btnIn.disabled = todayInCount >= MAX_PUNCH_PER_DAY;
+  btnOut.disabled = todayInCount===0 || todayOutCount >= MAX_PUNCH_PER_DAY;
 
   let notice="";
   let holiday="";
@@ -247,26 +256,31 @@ async function loadStatus(){
     if(today>=h.start&&today<=h.end){holiday=h.name;break;}
   }
   if(holiday) notice=`🎌 今日為 ${holiday}<br>`;
-  else if(now.getDay()===0||now.getDay()===6)
-    notice=`🔴 今日為週末<br>`;
+  else if(now.getDay()===0||now.getDay()===6) notice=`🔴 今日為週末<br>`;
 
   statusBox.innerHTML=
     notice+
-    `🟢 上班：${hasIn?inTime:"尚未"}<br>
-     🔵 下班：${hasOut?outTime:"—"}`;
+    `🟢 上班：${todayInCount?inTime:"尚未"}（${todayInCount}/2）<br>
+     🔵 下班：${todayOutCount?outTime:"—"}（${todayOutCount}/2）`;
 }
 loadStatus();
 
-/* ===== 打卡 ===== */
+/* ===== 打卡（含二次確認）===== */
 function punch(action){
+  const count = action==="上班"?todayInCount:todayOutCount;
+  if(count>=MAX_PUNCH_PER_DAY){
+    alert(`❌ ${action} 已超過今日可操作次數`);
+    return;
+  }
+  if(count===1){
+    if(!confirm(`⚠️ 你今天已經打過一次「${action}」\n是否確定要第二次修正？`)) return;
+  }
+
   navigator.geolocation.getCurrentPosition(async pos=>{
     const lat=pos.coords.latitude;
     const lng=pos.coords.longitude;
     const dist=distanceMeter(COMPANY_LAT,COMPANY_LNG,lat,lng);
-    const km=(dist*2)/1000;
-    const co2=(km*0.2).toFixed(2);
-
-    log(`📤 送出 ${action} 打卡…`);
+    log(`📤 送出 ${action}（第 ${count+1} 次）…`);
 
     await fetch(API_PUNCH,{
       method:"POST",
@@ -274,30 +288,24 @@ function punch(action){
       body:JSON.stringify({name,action,lat,lng})
     });
 
-    log(`✅ ${action} 成功｜距公司 ${dist} m${dist>200?" ⚠":""}`);
-    log(`🌱 通勤碳排：約 ${co2} kg CO₂`);
+    log(`✅ ${action} 成功｜距公司 ${dist} m`);
     loadStatus();
-  });
+  },()=>alert("❌ 無法取得 GPS"));
 }
 
 /* ===== PWA 安裝 ===== */
 let deferredPrompt;
 const btnInstall=document.getElementById("btnInstall");
-
 window.addEventListener("beforeinstallprompt",e=>{
   e.preventDefault();
   deferredPrompt=e;
   btnInstall.style.display="block";
 });
-
 btnInstall.addEventListener("click",async()=>{
   if(!deferredPrompt) return;
   deferredPrompt.prompt();
   const {outcome}=await deferredPrompt.userChoice;
-  if(outcome==="accepted"){
-    btnInstall.style.display="none";
-    log("⬇ 已開始安裝 App");
-  }
+  if(outcome==="accepted") log("⬇ 已開始安裝 App");
   deferredPrompt=null;
 });
 

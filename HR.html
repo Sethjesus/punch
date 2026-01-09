@@ -291,6 +291,9 @@ function drawTable(){
   mapQueue = [];
   let mapIdx = 0;
 
+  // ✅ ①：加入請假去重 Set（同一筆 leave.id 只顯示一次）
+  const shownLeaveIds = new Set();
+
   let html = `
   <tr>
     <th>日期</th>
@@ -364,6 +367,11 @@ function drawTable(){
 
   /* ===== 只有申請（沒打卡）===== */
   leaves.forEach(l=>{
+
+    // ✅ ②：同一筆請假只顯示一次（避免重複展開）
+    if (shownLeaveIds.has(l.id)) return;
+    shownLeaveIds.add(l.id);
+
     let cur = l.start_date;
     while(cur <= l.end_date){
       if(month && !cur.startsWith(month)){
@@ -371,7 +379,7 @@ function drawTable(){
         continue;
       }
 
-      // 若同日有上/下班記錄，仍要顯示申請行嗎？目前：只要當天沒有任何打卡(上/下班)就顯示申請
+      // 目前：只要當天沒有任何打卡(上/下班)就顯示申請
       const keyIn  = l.name + "_" + cur + "_上班";
       const keyOut = l.name + "_" + cur + "_下班";
 
@@ -399,6 +407,9 @@ function drawTable(){
               onchange="approveLeave(${l.id}, this.checked)">
           </td>
         </tr>`;
+
+        // ✅ 只顯示一筆：一旦顯示成功就 break（避免同一筆請假顯示多列）
+        break;
       }
 
       cur = nextDateStr(cur);
