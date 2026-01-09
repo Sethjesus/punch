@@ -3,49 +3,37 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>請假 / 加班 / 出差申請</title>
+<title>UDM ESG｜請假 / 加班 / 出差申請</title>
 
 <style>
-body{
-  background:#3f3f3f;
-  font-family:system-ui;
-}
+body{background:#3f3f3f;font-family:system-ui}
 .card{
-  width:360px;
-  margin:40px auto;
-  background:#f4f4f4;
-  padding:16px;
-  border-radius:10px;
+  width:380px;margin:30px auto;background:#f4f4f4;
+  padding:16px;border-radius:10px
 }
 input,select,button,textarea,label{
-  width:100%;
-  padding:8px;
-  margin:6px 0;
-  box-sizing:border-box;
+  width:100%;padding:8px;margin:6px 0;box-sizing:border-box
 }
-.inline{
-  display:flex;
-  gap:6px;
+button{cursor:pointer;border-radius:6px;border:0}
+.primary{background:#3498db;color:#fff}
+.danger{background:#c0392b;color:#fff}
+.small{font-size:12px;opacity:.8}
+hr{margin:12px 0}
+
+.list{
+  margin-top:14px;background:#fff;border-radius:8px;
+  max-height:260px;overflow:auto
 }
-button{ cursor:pointer; }
-.log{
-  background:#000;
-  color:#0f0;
-  font-size:12px;
-  height:120px;
-  overflow:auto;
-  padding:6px;
+.item{
+  border-bottom:1px solid #ddd;padding:8px
 }
-hr{ margin:10px 0; }
 .badge{
-  display:inline-block;
-  padding:2px 6px;
-  border-radius:4px;
-  font-size:12px;
-  margin-bottom:6px;
+  display:inline-block;padding:2px 6px;border-radius:4px;
+  font-size:12px;margin-right:4px
 }
-.badge.ot{ background:#dff0ff; }
-.badge.trip{ background:#e8ffe8; }
+.pending{background:#fff3cd}
+.approved{background:#d4edda}
+.withdrawn{background:#e0e0e0}
 </style>
 </head>
 
@@ -69,108 +57,111 @@ hr{ margin:10px 0; }
   </select>
 
   <label>開始日期</label>
-  <input type="date" id="startDate">
+  <input type="date" id="sd">
 
   <label>開始時間</label>
-  <input type="time" id="startTime" value="09:00">
+  <input type="time" id="st" value="09:00">
 
   <label>結束日期</label>
-  <input type="date" id="endDate">
+  <input type="date" id="ed">
 
   <label>結束時間</label>
-  <input type="time" id="endTime" value="18:00">
-
-  <div id="tripBlock" style="display:none">
-    <hr>
-    <span class="badge trip">出差資訊</span>
-    <input id="tripPlace" placeholder="出差地點（例：台中 / 高雄 / 日本東京）">
-    <label>
-      <input type="checkbox" id="crossCity">
-      跨縣市 / 國外
-    </label>
-  </div>
-
-  <div id="otBlock" style="display:none">
-    <hr>
-    <span class="badge ot">加班資訊</span>
-    <label>
-      <input type="checkbox" id="isHoliday">
-      假日加班
-    </label>
-  </div>
+  <input type="time" id="et" value="18:00">
 
   <textarea id="reason" placeholder="補充說明（選填）"></textarea>
 
-  <button onclick="submitForm()">送出申請</button>
+  <button class="primary" onclick="submit()">送出申請</button>
 
-  <div id="log" class="log"></div>
+  <hr>
+  <h4>我的申請紀錄</h4>
+  <div class="list" id="list"></div>
 </div>
 
 <script>
-const API = "https://punch-api.jackey1688.workers.dev/api/leave";
-const logBox = document.getElementById("log");
-const typeSel = document.getElementById("type");
-const tripBlock = document.getElementById("tripBlock");
-const otBlock = document.getElementById("otBlock");
+/* ===== API ===== */
+const API_LEAVE = "https://punch-api.jackey1688.workers.dev/api/leave";
+const API_WITHDRAW = "https://punch-api.jackey1688.workers.dev/api/leave/withdraw";
 
-typeSel.onchange = ()=>{
-  tripBlock.style.display = typeSel.value === "出差" ? "block" : "none";
-  otBlock.style.display   = typeSel.value === "加班" ? "block" : "none";
-};
+/* ===== Utils ===== */
+function qs(id){return document.getElementById(id)}
+function esc(s){return (s||"").replace(/\n/g,"<br>")}
 
-function log(msg){
-  logBox.innerHTML += msg + "<br>";
-  logBox.scrollTop = logBox.scrollHeight;
-}
+/* ===== Load list ===== */
+async function loadList(){
+  const name = qs("name").value.trim();
+  if(!name) return;
 
-async function submitForm(){
+  const all = await (await fetch(API_LEAVE)).json();
+  const mine = all.filter(l => l.name === name);
 
-  const name = document.getElementById("name").value.trim();
-  const type = typeSel.value;
-  const sd   = document.getElementById("startDate").value;
-  const st   = document.getElementById("startTime").value;
-  const ed   = document.getElementById("endDate").value;
-  const et   = document.getElementById("endTime").value;
-  const baseReason = document.getElementById("reason").value.trim();
+  const box = qs("list");
+  box.innerHTML = "";
 
-  if(!name || !type || !sd || !st || !ed || !et){
-    alert("請填寫完整日期與時間");
+  if(mine.length === 0){
+    box.innerHTML = `<div class="item small">尚無申請紀錄</div>`;
     return;
   }
 
-  let detail = `【${type}】\n開始：${sd} ${st}\n結束：${ed} ${et}`;
+  mine.sort((a,b)=>b.id-a.id).forEach(l=>{
+    const status = l.status || "pending";
+    box.innerHTML += `
+      <div class="item">
+        <div>
+          <span class="badge ${status}">${status}</span>
+          <b>${l.type}</b>
+        </div>
+        <div class="small">${l.start_date} ~ ${l.end_date}</div>
+        <div class="small">${esc(l.reason)}</div>
+        ${status==="pending"
+          ? `<button class="danger" onclick="withdraw(${l.id})">撤回</button>`
+          : ``}
+      </div>`;
+  });
+}
 
-  if(type === "出差"){
-    const place = document.getElementById("tripPlace").value.trim();
-    const cross = document.getElementById("crossCity").checked;
-    detail += `\n地點：${place || "未填"}\n${cross ? "跨縣市 / 國外" : "同縣市"}`;
+/* ===== Submit ===== */
+async function submit(){
+  const name=qs("name").value.trim();
+  const type=qs("type").value;
+  const sd=qs("sd").value, st=qs("st").value;
+  const ed=qs("ed").value, et=qs("et").value;
+  const reason=qs("reason").value.trim();
+
+  if(!name||!type||!sd||!st||!ed||!et){
+    alert("請填寫完整資料"); return;
   }
 
-  if(type === "加班"){
-    const holiday = document.getElementById("isHoliday").checked;
-    detail += `\n${holiday ? "假日加班" : "平日加班"}`;
-  }
+  const detail =
+`【${type}】
+開始：${sd} ${st}
+結束：${ed} ${et}
+${reason?("說明："+reason):""}`;
 
-  if(baseReason){
-    detail += `\n說明：${baseReason}`;
-  }
-
-  log("📤 送出申請中…");
-
-  await fetch(API,{
+  await fetch(API_LEAVE,{
     method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({
-      name,
-      type,
-      start_date: sd,
-      end_date: ed,
-      reason: detail
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      name,type,start_date:sd,end_date:ed,reason:detail
     })
   });
 
-  log("✅ 申請已送出（含時間 / 出差 / 加班資訊）");
+  alert("申請已送出");
+  loadList();
 }
+
+/* ===== Withdraw ===== */
+async function withdraw(id){
+  if(!confirm("確定要撤回此申請？")) return;
+  await fetch(API_WITHDRAW,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({id})
+  });
+  loadList();
+}
+
+/* ===== Auto reload ===== */
+qs("name").addEventListener("change", loadList);
 </script>
 
 </body>
