@@ -42,9 +42,28 @@ header div{font-size:12px;opacity:.85}
 }
 
 /* 今日 */
-.today{text-align:center;margin-bottom:14px}
+.today{text-align:center;margin-bottom:10px}
 .today .date{font-size:16px;font-weight:700}
 .today .week{font-size:13px;color:var(--muted)}
+
+/* 姓名 */
+.nameBox{
+  margin-top:6px;
+  font-size:14px;
+  color:#334155;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+}
+.editName{
+  border:0;
+  background:#e5e7eb;
+  border-radius:6px;
+  padding:2px 6px;
+  cursor:pointer;
+  font-size:12px;
+}
 
 /* 狀態 */
 .status{
@@ -109,24 +128,35 @@ button:disabled{opacity:.4;cursor:not-allowed}
 
 <div class="container">
 
+  <!-- 今日 -->
   <div class="today">
     <div class="date" id="todayDate"></div>
     <div class="week" id="todayWeek"></div>
+
+    <!-- 姓名 -->
+    <div class="nameBox">
+      👤 <span id="userName"></span>
+      <button class="editName" onclick="editName()">✏️</button>
+    </div>
   </div>
 
+  <!-- 狀態 -->
   <div class="status" id="statusBox">讀取今日狀態中…</div>
 
+  <!-- 打卡 -->
   <div class="actions">
     <button id="btnIn" class="btn-in" onclick="punch('上班')">上班打卡</button>
     <button id="btnOut" class="btn-out" onclick="punch('下班')">下班打卡</button>
   </div>
 
+  <!-- 次功能 -->
   <div class="sub">
     <button onclick="location.href='Leave.html'">📝 請假 / 出差 / 加班</button>
     <button onclick="location.href='HR.html'">📊 HR 總覽</button>
     <button id="btnInstall" style="display:none">⬇ 下載 App</button>
   </div>
 
+  <!-- Log -->
   <div class="log" id="log"></div>
 </div>
 
@@ -152,23 +182,38 @@ const HOLIDAYS=[
  {start:"2026-12-25",end:"2026-12-27",name:"行憲紀念日"}
 ];
 
+/* ===== DOM ===== */
 const logBox=document.getElementById("log");
 const statusBox=document.getElementById("statusBox");
 const btnIn=document.getElementById("btnIn");
 const btnOut=document.getElementById("btnOut");
 
-/* 使用者 */
-const name=localStorage.getItem("name")||prompt("請輸入姓名");
-localStorage.setItem("name",name);
+/* ===== 姓名（可修改）===== */
+let name=localStorage.getItem("name");
+if(!name){
+  name=prompt("請輸入姓名");
+  localStorage.setItem("name",name);
+}
+const userNameEl=document.getElementById("userName");
+userNameEl.innerText=name;
 
-/* 今日 */
+function editName(){
+  const newName=prompt("請輸入新的姓名",name);
+  if(!newName) return;
+  name=newName.trim();
+  localStorage.setItem("name",name);
+  userNameEl.innerText=name;
+  log(`👤 已切換使用者：${name}`);
+}
+
+/* ===== 今日 ===== */
 const now=new Date();
 const today=now.toISOString().slice(0,10);
 const map=["日","一","二","三","四","五","六"];
 document.getElementById("todayDate").innerText=today;
 document.getElementById("todayWeek").innerText="週"+map[now.getDay()];
 
-/* 工具 */
+/* ===== 工具 ===== */
 function log(t){
   logBox.innerHTML+=t+"<br>";
   logBox.scrollTop=logBox.scrollHeight;
@@ -183,7 +228,7 @@ function distanceMeter(lat1,lng1,lat2,lng2){
   return Math.round(R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));
 }
 
-/* 狀態 */
+/* ===== 狀態 ===== */
 async function loadStatus(){
   const data=await(await fetch(API_REC)).json();
   let hasIn=false,hasOut=false,inTime="",outTime="";
@@ -212,7 +257,7 @@ async function loadStatus(){
 }
 loadStatus();
 
-/* 打卡 */
+/* ===== 打卡 ===== */
 function punch(action){
   navigator.geolocation.getCurrentPosition(async pos=>{
     const lat=pos.coords.latitude;
@@ -256,7 +301,7 @@ btnInstall.addEventListener("click",async()=>{
   deferredPrompt=null;
 });
 
-/* SW */
+/* ===== Service Worker ===== */
 if("serviceWorker"in navigator){
   navigator.serviceWorker.register("./sw.js");
 }
