@@ -498,7 +498,8 @@ function drawTable(){
     <th>申請類型</th>
     <th>期間</th>
     <th>詳細</th>
-    <th>核准</th>
+    <th>請假核准</th>
+
   </tr>`;
 
   const shown = new Set();
@@ -705,14 +706,21 @@ document.querySelectorAll("#tbl tr").forEach((tr,i)=>{
   const tds = [...tr.children];
 
   // 第 12 欄（核准 / 狀態）
-  const approveText = (tds[11]?.innerText || "").trim();
+  const approveCell = tds[11];
+  const approveText = (approveCell?.innerText || "").trim();
 
   // 🚫 已撤回 → 不進 Excel
   if(approveText.includes("撤回")) return;
 
-  // 判斷是否已核准（checkbox checked）
-  const isApproved = !!tds[11]?.querySelector('input[type="checkbox"][checked]');
-  const statusText = isApproved ? "已核准" : "審核中";
+  const rowType = tds[3]?.innerText.trim(); // 上班 / 下班 / 申請
+
+  let statusText = "";
+
+  // ✅ 只有「申請」才有狀態
+  if(rowType === "申請"){
+    const isApproved = !!approveCell?.querySelector('input[type="checkbox"][checked]');
+    statusText = isApproved ? "已核准" : "審核中";
+  }
 
   const row = tds.map((td, idx) => {
     if(idx === 11) return statusText; // 狀態欄
@@ -721,6 +729,7 @@ document.querySelectorAll("#tbl tr").forEach((tr,i)=>{
 
   rowsAll.push(row);
 });
+
 
   // 依姓名分組
   const people = {};
@@ -777,24 +786,31 @@ document.querySelectorAll("#tbl tr").forEach((tr,i)=>{
   // 日期 | 姓名 | 最早上班 | 最晚下班 | 最遠距離(m)
   const summary = {};
   rowsAll.forEach(r=>{
-    const date = r[0];
-    const name = r[2];
-    const type = r[3];
-    const inTime = r[4];
-    const outTime = r[5];
-    const dist = Number(r[7]) || 0;
+  const date = r[0];
+  const name = r[2];
+  const rowType = r[3];   // ✅ 關鍵：從 row 取類型
+  const inTime = r[4];
+  const outTime = r[5];
+  const dist = Number(r[7]) || 0;
 
-    const key = date + "_" + name;
-    if(!summary[key]) summary[key] = { date, name, earliest:"", latest:"", maxDist:0 };
+  const key = date + "_" + name;
+  if(!summary[key]) summary[key] = { date, name, earliest:"", latest:"", maxDist:0 };
 
-    if(type==="上班" && inTime){
-      if(!summary[key].earliest || inTime < summary[key].earliest) summary[key].earliest = inTime;
+  if(rowType === "上班" && inTime){
+    if(!summary[key].earliest || inTime < summary[key].earliest){
+      summary[key].earliest = inTime;
     }
-    if(type==="下班" && outTime){
-      if(!summary[key].latest || outTime > summary[key].latest) summary[key].latest = outTime;
+  }
+
+  if(rowType === "下班" && outTime){
+    if(!summary[key].latest || outTime > summary[key].latest){
+      summary[key].latest = outTime;
     }
-    summary[key].maxDist = Math.max(summary[key].maxDist, dist);
-  });
+  }
+
+  summary[key].maxDist = Math.max(summary[key].maxDist, dist);
+});
+
 
   const sumAoa = [["日期","姓名","最早上班","最晚下班","最遠距離(m)"]];
   Object.values(summary).forEach(v=>{
