@@ -303,6 +303,13 @@ th{
   margin-top:4px;
 }
 .small{font-size:11px;opacity:.9}
+
+.withdrawnText{
+  color:#888;
+  font-size:12px;
+  font-style:italic;
+}
+
 </style>
 </head>
 
@@ -432,6 +439,7 @@ function nextDateStr(yyyy_mm_dd){
   return new Date(t).toISOString().slice(0,10);
 }
 
+
 /* =====================
    Load
 ===================== */
@@ -541,10 +549,19 @@ function drawTable(){
       <td>${leave ? leave.type : ""}</td>
       <td>${leave ? (leave.start_date + " ~ " + leave.end_date) : ""}</td>
       <td>${leave ? parseDetail(leave.reason) : ""}</td>
-      <td>${leave ? `
-        <input type="checkbox" ${leave.approved ? "checked" : ""}
-          onchange="approveLeave(${leave.id}, this.checked)">
-      ` : ""}</td>
+      <td>
+${leave ? (
+  leave.withdrawn === 1
+  ? `<span class="withdrawnText">已撤回</span>`
+  : leave.approved === 1
+    ? `<input type="checkbox" checked disabled>`
+    : `<input type="checkbox"
+         onchange="approveLeave(${leave.id}, true)">`
+
+) : ""}
+</td>
+
+
     </tr>`;
   });
 
@@ -586,9 +603,16 @@ function drawTable(){
           <td>${l.start_date} ~ ${l.end_date}</td>
           <td>${parseDetail(l.reason)}</td>
           <td>
-            <input type="checkbox" ${l.approved ? "checked" : ""}
-              onchange="approveLeave(${l.id}, this.checked)">
-          </td>
+${l.withdrawn === 1
+  ? `<span class="withdrawnText">已撤回</span>`
+  : l.approved === 1
+    ? `<input type="checkbox" checked disabled>`
+    : `<input type="checkbox"
+         onchange="approveLeave(${l.id}, true)">`
+}
+</td>
+
+
         </tr>`;
 
         // ✅ 只顯示一筆：一旦顯示成功就 break（避免同一筆請假顯示多列）
@@ -614,12 +638,29 @@ function drawTable(){
    Approve
 ===================== */
 async function approveLeave(id, checked){
+  const leave = leaves.find(l => l.id === id);
+  if(!leave) return;
+
+  // 🚫 已撤回 → 絕對不能再核准
+  if(leave.withdrawn === 1){
+    alert("此申請已撤回，無法核准");
+    drawTable();
+    return;
+  }
+
   await fetch(API_APP,{
     method:"POST",
     headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ id, approved: checked ? 1 : 0 })
+    body: JSON.stringify({
+      id,
+      approved: checked ? 1 : 0
+    })
   });
+
+  // 重新載入
+  load();
 }
+
 
 /* =====================
    Excel helpers
@@ -657,13 +698,29 @@ function exportExcel(){
 
   // 先從目前表格抓資料（和畫面一致）
   const rowsAll = [];
-  document.querySelectorAll("#tbl tr").forEach((tr,i)=>{
-    if(i===0) return;
-    const tds = [...tr.children];
-    // 12 欄
-    const row = tds.map(td => td.innerText.replace(/\n/g," ").trim());
-    rowsAll.push(row);
+// ✅ 從目前表格抓資料（和畫面一致）
+document.querySelectorAll("#tbl tr").forEach((tr,i)=>{
+  if(i===0) return;
+
+  const tds = [...tr.children];
+
+  // 第 12 欄（核准 / 狀態）
+  const approveText = (tds[11]?.innerText || "").trim();
+
+  // 🚫 已撤回 → 不進 Excel
+  if(approveText.includes("撤回")) return;
+
+  // 判斷是否已核准（checkbox checked）
+  const isApproved = !!tds[11]?.querySelector('input[type="checkbox"][checked]');
+  const statusText = isApproved ? "已核准" : "審核中";
+
+  const row = tds.map((td, idx) => {
+    if(idx === 11) return statusText; // 狀態欄
+    return td.innerText.replace(/\n/g," ").trim();
   });
+
+  rowsAll.push(row);
+});
 
   // 依姓名分組
   const people = {};
@@ -675,7 +732,12 @@ function exportExcel(){
 
   // 每人 sheet
   Object.keys(people).forEach(name=>{
-    const header = ["日期","星期","姓名","類型","上班","下班","GPS / 地圖","距公司(m)","申請類型","期間","詳細","核准"];
+    const header = [
+  "日期","星期","姓名","類型","上班","下班",
+  "GPS / 地圖","距公司(m)",
+  "申請類型","期間","詳細","狀態"
+   ];
+
     const aoa = [header, ...people[name]];
 
     const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -765,6 +827,9 @@ function exportExcel(){
   const ym = document.getElementById("monthPicker").value || "ALL";
   XLSX.writeFile(wb, `UDM_ESG_HR_${ym}.xlsx`);
 }
+
+
+
 </script>
 
 </body>

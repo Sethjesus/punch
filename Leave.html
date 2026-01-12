@@ -17,6 +17,7 @@ input,select,button,textarea,label{
 button{cursor:pointer;border-radius:6px;border:0}
 .primary{background:#3498db;color:#fff}
 .danger{background:#c0392b;color:#fff}
+.secondary{background:#555;color:#fff}
 .small{font-size:12px;opacity:.8}
 hr{margin:12px 0}
 
@@ -41,6 +42,8 @@ hr{margin:12px 0}
 
 <div class="card">
   <h3>請假 / 加班 / 出差申請</h3>
+
+  <button class="secondary" onclick="goHome()">← 回打卡首頁</button>
 
   <input id="name" placeholder="姓名">
 
@@ -78,15 +81,29 @@ hr{margin:12px 0}
 </div>
 
 <script>
-/* ===== API ===== */
-const API_LEAVE = "https://punch-api.jackey1688.workers.dev/api/leave";
+/* =====================
+   API
+===================== */
+const API_LEAVE    = "https://punch-api.jackey1688.workers.dev/api/leave";
 const API_WITHDRAW = "https://punch-api.jackey1688.workers.dev/api/leave/withdraw";
 
-/* ===== Utils ===== */
-function qs(id){return document.getElementById(id)}
-function esc(s){return (s||"").replace(/\n/g,"<br>")}
+/* =====================
+   Utils
+===================== */
+function qs(id){ return document.getElementById(id); }
+function esc(s){ return (s||"").replace(/\n/g,"<br>"); }
+function goHome(){ location.href="https://sethjesus.github.io/punch/"; }
 
-/* ===== Load list ===== */
+/* ===== 狀態唯一判斷（關鍵）===== */
+function getStatus(l){
+  if(l.withdrawn === 1) return "withdrawn";
+  if(l.approved  === 1) return "approved";
+  return "pending";
+}
+
+/* =====================
+   Load list
+===================== */
 async function loadList(){
   const name = qs("name").value.trim();
   if(!name) return;
@@ -103,29 +120,45 @@ async function loadList(){
   }
 
   mine.sort((a,b)=>b.id-a.id).forEach(l=>{
-    const status = l.status || "pending";
+    const status = getStatus(l);
+
+    const statusText = {
+      pending:   "審核中",
+      approved:  "已核准",
+      withdrawn: "已撤回"
+    }[status];
+
     box.innerHTML += `
       <div class="item">
         <div>
-          <span class="badge ${status}">${status}</span>
+          <span class="badge ${status}">${statusText}</span>
           <b>${l.type}</b>
         </div>
+
         <div class="small">${l.start_date} ~ ${l.end_date}</div>
         <div class="small">${esc(l.reason)}</div>
-        ${status==="pending"
-          ? `<button class="danger" onclick="withdraw(${l.id})">撤回</button>`
-          : ``}
-      </div>`;
+
+        ${
+          status === "pending"
+            ? `<button class="danger" onclick="withdraw(${l.id})">撤回</button>`
+            : ``
+        }
+      </div>
+    `;
   });
 }
 
-/* ===== Submit ===== */
+/* =====================
+   Submit
+===================== */
 async function submit(){
-  const name=qs("name").value.trim();
-  const type=qs("type").value;
-  const sd=qs("sd").value, st=qs("st").value;
-  const ed=qs("ed").value, et=qs("et").value;
-  const reason=qs("reason").value.trim();
+  const name = qs("name").value.trim();
+  const type = qs("type").value;
+  const sd   = qs("sd").value;
+  const st   = qs("st").value;
+  const ed   = qs("ed").value;
+  const et   = qs("et").value;
+  const reason = qs("reason").value.trim();
 
   if(!name||!type||!sd||!st||!ed||!et){
     alert("請填寫完整資料"); return;
@@ -135,13 +168,17 @@ async function submit(){
 `【${type}】
 開始：${sd} ${st}
 結束：${ed} ${et}
-${reason?("說明："+reason):""}`;
+${reason ? "說明："+reason : ""}`;
 
   await fetch(API_LEAVE,{
     method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({
-      name,type,start_date:sd,end_date:ed,reason:detail
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({
+      name,
+      type,
+      start_date: sd,
+      end_date: ed,
+      reason: detail
     })
   });
 
@@ -149,18 +186,24 @@ ${reason?("說明："+reason):""}`;
   loadList();
 }
 
-/* ===== Withdraw ===== */
+/* =====================
+   Withdraw
+===================== */
 async function withdraw(id){
   if(!confirm("確定要撤回此申請？")) return;
+
   await fetch(API_WITHDRAW,{
     method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({id})
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ id })
   });
+
   loadList();
 }
 
-/* ===== Auto reload ===== */
+/* =====================
+   Auto reload
+===================== */
 qs("name").addEventListener("change", loadList);
 </script>
 
