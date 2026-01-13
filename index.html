@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>UDM ESG｜上班打卡系統</title>
 
-<!-- PWA -->
+<!-- ===== PWA ===== -->
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1e293b">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -41,18 +41,14 @@ header div{font-size:12px;opacity:.85}
   box-shadow:0 20px 40px rgba(0,0,0,.35);
 }
 
-/* 今日 */
 .today{text-align:center;margin-bottom:10px}
 .today .date{font-size:16px;font-weight:700}
 .today .week{font-size:13px;color:var(--muted)}
 
-/* 姓名 */
 .nameBox{
   margin-top:6px;
   font-size:14px;
-  color:#334155;
   display:flex;
-  align-items:center;
   justify-content:center;
   gap:6px;
 }
@@ -65,7 +61,6 @@ header div{font-size:12px;opacity:.85}
   font-size:12px;
 }
 
-/* 狀態 */
 .status{
   background:#eef2ff;
   padding:12px;
@@ -74,7 +69,10 @@ header div{font-size:12px;opacity:.85}
   font-size:14px;
 }
 
-/* 打卡 */
+/* ===== 提醒顏色 ===== */
+.notice-yellow{color:#b45309;font-weight:800}
+.notice-red{color:#dc2626;font-weight:900}
+
 .actions{display:flex;gap:10px;margin-bottom:14px}
 button{
   flex:1;
@@ -85,11 +83,10 @@ button{
   font-weight:700;
   cursor:pointer;
 }
-button:disabled{opacity:.4;cursor:not-allowed}
-.btn-in{background:var(--success);color:#fff}
-.btn-out{background:var(--primary);color:#fff}
+button:disabled{opacity:.4}
+.btn-in{background:#16a34a;color:#fff}
+.btn-out{background:#2563eb;color:#fff}
 
-/* 次功能 */
 .sub{display:flex;gap:10px;flex-wrap:wrap}
 .sub button{
   padding:10px;
@@ -98,14 +95,13 @@ button:disabled{opacity:.4;cursor:not-allowed}
   color:#fff;
 }
 
-/* 安裝按鍵 */
 #btnInstall{
   background:#f59e0b;
   color:#111827;
   font-weight:800;
+  display:none;
 }
 
-/* Log */
 .log{
   margin-top:12px;
   background:#020617;
@@ -128,35 +124,28 @@ button:disabled{opacity:.4;cursor:not-allowed}
 
 <div class="container">
 
-  <!-- 今日 -->
   <div class="today">
     <div class="date" id="todayDate"></div>
     <div class="week" id="todayWeek"></div>
-
-    <!-- 姓名 -->
     <div class="nameBox">
       👤 <span id="userName"></span>
       <button class="editName" onclick="editName()">✏️</button>
     </div>
   </div>
 
-  <!-- 狀態 -->
   <div class="status" id="statusBox">讀取今日狀態中…</div>
 
-  <!-- 打卡 -->
   <div class="actions">
     <button id="btnIn" class="btn-in" onclick="punch('上班')">上班打卡</button>
     <button id="btnOut" class="btn-out" onclick="punch('下班')">下班打卡</button>
   </div>
 
-  <!-- 次功能 -->
   <div class="sub">
     <button onclick="location.href='Leave.html'">📝 請假 / 出差 / 加班</button>
     <button onclick="location.href='HR.html'">📊 HR 總覽</button>
-    <button id="btnInstall" style="display:none">⬇ 下載 App</button>
+    <button id="btnInstall">⬇ 下載 App</button>
   </div>
 
-  <!-- Log -->
   <div class="log" id="log"></div>
 </div>
 
@@ -165,72 +154,53 @@ button:disabled{opacity:.4;cursor:not-allowed}
 const API_PUNCH="https://punch-api.jackey1688.workers.dev/api/punch";
 const API_REC="https://punch-api.jackey1688.workers.dev/api/records";
 
-/* ===== 公司座標 ===== */
-const COMPANY_LAT=25.00657;
-const COMPANY_LNG=121.48416;
-
-/* ===== 二次機會設定 ===== */
-const MAX_PUNCH_PER_DAY = 2;
+/* ===== 設定 ===== */
+const MAX_PUNCH_PER_DAY=2;
 
 /* ===== 國定假日 ===== */
 const HOLIDAYS=[
  {start:"2026-02-14",end:"2026-02-22",name:"農曆春節"},
  {start:"2026-02-27",end:"2026-03-01",name:"228連假"},
- {start:"2026-04-03",end:"2026-04-06",name:"清明連假"},
- {start:"2026-05-01",end:"2026-05-03",name:"勞動節連假"},
- {start:"2026-06-19",end:"2026-06-21",name:"端午連假"},
- {start:"2026-09-25",end:"2026-09-28",name:"中秋/教師節"},
- {start:"2026-10-09",end:"2026-10-11",name:"國慶連假"},
- {start:"2026-10-24",end:"2026-10-26",name:"光復節"},
- {start:"2026-12-25",end:"2026-12-27",name:"行憲紀念日"}
+ {start:"2026-04-03",end:"2026-04-06",name:"清明連假"}
 ];
 
 /* ===== DOM ===== */
-const logBox=document.getElementById("log");
+const logBox=log;
 const statusBox=document.getElementById("statusBox");
 const btnIn=document.getElementById("btnIn");
 const btnOut=document.getElementById("btnOut");
 
-/* ===== 姓名 ===== */
+/* ===== 使用者 ===== */
 let name=localStorage.getItem("name");
 if(!name){
   name=prompt("請輸入姓名");
   localStorage.setItem("name",name);
 }
-document.getElementById("userName").innerText=name;
+userName.innerText=name;
 
 function editName(){
-  const newName=prompt("請輸入新的姓名",name);
-  if(!newName) return;
-  name=newName.trim();
+  const n=prompt("請輸入新的姓名",name);
+  if(!n) return;
+  name=n.trim();
   localStorage.setItem("name",name);
-  document.getElementById("userName").innerText=name;
-  log(`👤 已切換使用者：${name}`);
+  userName.innerText=name;
+  loadStatus();
 }
 
 /* ===== 今日 ===== */
 const now=new Date();
 const today=now.toISOString().slice(0,10);
 const map=["日","一","二","三","四","五","六"];
-document.getElementById("todayDate").innerText=today;
-document.getElementById("todayWeek").innerText="週"+map[now.getDay()];
+todayDate.innerText=today;
+todayWeek.innerText="週"+map[now.getDay()];
 
 /* ===== 工具 ===== */
 function log(t){
   logBox.innerHTML+=t+"<br>";
   logBox.scrollTop=logBox.scrollHeight;
 }
-function distanceMeter(lat1,lng1,lat2,lng2){
-  const R=6371000;
-  const dLat=(lat2-lat1)*Math.PI/180;
-  const dLng=(lng2-lng1)*Math.PI/180;
-  const a=Math.sin(dLat/2)**2+
-    Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
-    Math.sin(dLng/2)**2;
-  return Math.round(R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));
-}
 
-/* ===== 狀態（含次數）===== */
+/* ===== 狀態 ===== */
 let todayInCount=0;
 let todayOutCount=0;
 
@@ -247,16 +217,31 @@ async function loadStatus(){
     }
   });
 
-  btnIn.disabled = todayInCount >= MAX_PUNCH_PER_DAY;
-  btnOut.disabled = todayInCount===0 || todayOutCount >= MAX_PUNCH_PER_DAY;
+  btnIn.disabled=todayInCount>=MAX_PUNCH_PER_DAY;
+  btnOut.disabled=todayInCount===0||todayOutCount>=MAX_PUNCH_PER_DAY;
 
   let notice="";
   let holiday="";
   for(const h of HOLIDAYS){
     if(today>=h.start&&today<=h.end){holiday=h.name;break;}
   }
-  if(holiday) notice=`🎌 今日為 ${holiday}<br>`;
-  else if(now.getDay()===0||now.getDay()===6) notice=`🔴 今日為週末<br>`;
+
+  const hhmm=now.getHours()*100+now.getMinutes();
+
+  if(holiday){
+    notice=`🎌 今日為 ${holiday}<br>`;
+  }
+  else if(now.getDay()===0||now.getDay()===6){
+    notice=`🔴 今日為週末<br>`;
+  }
+  else if(todayInCount===0){
+    if(hhmm>=910 && hhmm<930){
+      notice=`<span class="notice-yellow">🟡 您尚未打卡，請儘速完成打卡</span><br>`;
+    }
+    else if(hhmm>=930){
+      notice=`<span class="notice-red">🔴 您已超過上班時間，請立即打卡</span><br>`;
+    }
+  }
 
   statusBox.innerHTML=
     notice+
@@ -265,30 +250,22 @@ async function loadStatus(){
 }
 loadStatus();
 
-/* ===== 打卡（含二次確認）===== */
+/* ===== 打卡 ===== */
 function punch(action){
-  const count = action==="上班"?todayInCount:todayOutCount;
+  const count=action==="上班"?todayInCount:todayOutCount;
   if(count>=MAX_PUNCH_PER_DAY){
-    alert(`❌ ${action} 已超過今日可操作次數`);
+    alert(`❌ ${action} 已超過今日次數`);
     return;
   }
-  if(count===1){
-    if(!confirm(`⚠️ 你今天已經打過一次「${action}」\n是否確定要第二次修正？`)) return;
-  }
+  if(count===1&&!confirm(`⚠️ 今日已打過一次 ${action}，是否修正？`)) return;
 
   navigator.geolocation.getCurrentPosition(async pos=>{
-    const lat=pos.coords.latitude;
-    const lng=pos.coords.longitude;
-    const dist=distanceMeter(COMPANY_LAT,COMPANY_LNG,lat,lng);
-    log(`📤 送出 ${action}（第 ${count+1} 次）…`);
-
     await fetch(API_PUNCH,{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({name,action,lat,lng})
+      body:JSON.stringify({name,action,lat:pos.coords.latitude,lng:pos.coords.longitude})
     });
-
-    log(`✅ ${action} 成功｜距公司 ${dist} m`);
+    log(`✅ ${action} 成功`);
     loadStatus();
   },()=>alert("❌ 無法取得 GPS"));
 }
@@ -301,13 +278,11 @@ window.addEventListener("beforeinstallprompt",e=>{
   deferredPrompt=e;
   btnInstall.style.display="block";
 });
-btnInstall.addEventListener("click",async()=>{
+btnInstall.onclick=async()=>{
   if(!deferredPrompt) return;
   deferredPrompt.prompt();
-  const {outcome}=await deferredPrompt.userChoice;
-  if(outcome==="accepted") log("⬇ 已開始安裝 App");
-  deferredPrompt=null;
-});
+  await deferredPrompt.userChoice;
+};
 
 /* ===== Service Worker ===== */
 if("serviceWorker"in navigator){
