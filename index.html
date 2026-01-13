@@ -5,107 +5,68 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>UDM ESG｜上班打卡系統</title>
 
-<!-- PWA -->
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1e293b">
 <link rel="apple-touch-icon" href="icon-192.png">
 
 <style>
 :root{
-  --bg:#0f172a;
   --card:#f8fafc;
-  --primary:#2563eb;
   --success:#16a34a;
+  --primary:#2563eb;
   --muted:#64748b;
 }
 body{
   margin:0;
   background:linear-gradient(180deg,#0f172a,#020617);
-  font-family:system-ui,-apple-system,BlinkMacSystemFont;
+  font-family:system-ui;
 }
 header{
-  background:linear-gradient(90deg,#020617,#1e293b);
+  background:#020617;
   color:#fff;
   padding:16px;
   text-align:center;
 }
-header h1{margin:0;font-size:20px}
-header div{font-size:12px;opacity:.85}
-
 .container{
   max-width:420px;
   margin:20px auto;
   background:var(--card);
   border-radius:18px;
   padding:18px;
-  box-shadow:0 20px 40px rgba(0,0,0,.35);
 }
-
-/* 今日 */
-.today{text-align:center;margin-bottom:10px}
-.today .date{font-size:16px;font-weight:700}
+.today{text-align:center}
+.today .date{font-size:18px;font-weight:700}
 .today .week{font-size:13px;color:var(--muted)}
 
-/* 姓名 */
 .nameBox{
-  margin-top:6px;
-  font-size:14px;
-  color:#334155;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap:6px;
+  display:flex;justify-content:center;gap:6px;margin-top:6px
 }
-.editName{
-  border:0;
-  background:#e5e7eb;
-  border-radius:6px;
-  padding:2px 6px;
-  cursor:pointer;
-  font-size:12px;
-}
+.editName{border:0;background:#e5e7eb;border-radius:6px;cursor:pointer}
 
-/* 狀態 */
 .status{
   background:#eef2ff;
   padding:12px;
   border-radius:14px;
-  margin-bottom:14px;
+  margin:14px 0;
   font-size:14px;
 }
 
-/* 打卡 */
-.actions{display:flex;gap:10px;margin-bottom:14px}
+.actions{display:flex;gap:10px}
 button{
   flex:1;
   padding:14px;
   border-radius:14px;
   border:0;
-  font-size:15px;
   font-weight:700;
   cursor:pointer;
 }
-button:disabled{opacity:.4;cursor:not-allowed}
 .btn-in{background:var(--success);color:#fff}
 .btn-out{background:var(--primary);color:#fff}
+button:disabled{opacity:.4}
 
-/* 次功能 */
-.sub{display:flex;gap:10px;flex-wrap:wrap}
-.sub button{
-  padding:10px;
-  font-size:13px;
-  background:#334155;
-  color:#fff;
-}
+.sub{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+.sub button{background:#334155;color:#fff;font-size:13px}
 
-/* 安裝按鍵 */
-#btnInstall{
-  background:#f59e0b;
-  color:#111827;
-  font-weight:800;
-}
-
-/* Log */
 .log{
   margin-top:12px;
   background:#020617;
@@ -115,6 +76,21 @@ button:disabled{opacity:.4;cursor:not-allowed}
   border-radius:12px;
   height:140px;
   overflow:auto;
+}
+
+.marquee{
+  background:#dc2626;color:#fff;
+  padding:8px;border-radius:10px;
+  overflow:hidden;white-space:nowrap;font-weight:700;
+}
+.marquee span{
+  display:inline-block;
+  padding-left:100%;
+  animation:scroll 12s linear infinite;
+}
+@keyframes scroll{
+  from{transform:translateX(0)}
+  to{transform:translateX(-100%)}
 }
 </style>
 </head>
@@ -128,188 +104,115 @@ button:disabled{opacity:.4;cursor:not-allowed}
 
 <div class="container">
 
-  <!-- 今日 -->
   <div class="today">
     <div class="date" id="todayDate"></div>
     <div class="week" id="todayWeek"></div>
-
-    <!-- 姓名 -->
     <div class="nameBox">
       👤 <span id="userName"></span>
       <button class="editName" onclick="editName()">✏️</button>
     </div>
   </div>
 
-  <!-- 狀態 -->
-  <div class="status" id="statusBox">讀取今日狀態中…</div>
+  <div class="status" id="statusBox">讀取中…</div>
 
-  <!-- 打卡 -->
   <div class="actions">
     <button id="btnIn" class="btn-in" onclick="punch('上班')">上班打卡</button>
     <button id="btnOut" class="btn-out" onclick="punch('下班')">下班打卡</button>
   </div>
 
-  <!-- 次功能 -->
   <div class="sub">
-    <button onclick="location.href='Leave.html'">📝 請假 / 出差 / 加班</button>
-    <button onclick="location.href='HR.html'">📊 HR 總覽</button>
-    <button id="btnInstall" style="display:none">⬇ 下載 App</button>
+    <button onclick="location.href='Leave.html'">📝 請假</button>
+    <button onclick="location.href='HR.html'">📊 HR</button>
+    <button onclick="showMonthlyLog()">📅 本月紀錄</button>
   </div>
 
-  <!-- Log -->
   <div class="log" id="log"></div>
 </div>
 
 <script>
-/* ===== API ===== */
 const API_PUNCH="https://punch-api.jackey1688.workers.dev/api/punch";
 const API_REC="https://punch-api.jackey1688.workers.dev/api/records";
 
-/* ===== 公司座標 ===== */
-const COMPANY_LAT=25.00657;
-const COMPANY_LNG=121.48416;
-
-/* ===== 二次機會設定 ===== */
-const MAX_PUNCH_PER_DAY = 2;
-
-/* ===== 國定假日 ===== */
-const HOLIDAYS=[
- {start:"2026-02-14",end:"2026-02-22",name:"農曆春節"},
- {start:"2026-02-27",end:"2026-03-01",name:"228連假"},
- {start:"2026-04-03",end:"2026-04-06",name:"清明連假"},
- {start:"2026-05-01",end:"2026-05-03",name:"勞動節連假"},
- {start:"2026-06-19",end:"2026-06-21",name:"端午連假"},
- {start:"2026-09-25",end:"2026-09-28",name:"中秋/教師節"},
- {start:"2026-10-09",end:"2026-10-11",name:"國慶連假"},
- {start:"2026-10-24",end:"2026-10-26",name:"光復節"},
- {start:"2026-12-25",end:"2026-12-27",name:"行憲紀念日"}
-];
-
-/* ===== DOM ===== */
-const logBox=document.getElementById("log");
-const statusBox=document.getElementById("statusBox");
-const btnIn=document.getElementById("btnIn");
-const btnOut=document.getElementById("btnOut");
-
-/* ===== 姓名 ===== */
-let name=localStorage.getItem("name");
-if(!name){
-  name=prompt("請輸入姓名");
-  localStorage.setItem("name",name);
-}
+const MAX=2;
+let inCnt=0,outCnt=0,lastIn="",lastOut="";
+let name=localStorage.getItem("name")||prompt("請輸入姓名");
+localStorage.setItem("name",name);
 document.getElementById("userName").innerText=name;
 
 function editName(){
-  const newName=prompt("請輸入新的姓名",name);
-  if(!newName) return;
-  name=newName.trim();
+  const n=prompt("新姓名",name);
+  if(!n)return;
+  name=n;
   localStorage.setItem("name",name);
   document.getElementById("userName").innerText=name;
-  log(`👤 已切換使用者：${name}`);
 }
 
-/* ===== 今日 ===== */
-const now=new Date();
-const today=now.toISOString().slice(0,10);
-const map=["日","一","二","三","四","五","六"];
-document.getElementById("todayDate").innerText=today;
-document.getElementById("todayWeek").innerText="週"+map[now.getDay()];
+function renderToday(){
+  const d=new Date();
+  document.getElementById("todayDate").innerText=d.toISOString().slice(0,10);
+  document.getElementById("todayWeek").innerText="星期"+"日一二三四五六"[d.getDay()];
+}
+renderToday();
 
-/* ===== 工具 ===== */
 function log(t){
-  logBox.innerHTML+=t+"<br>";
-  logBox.scrollTop=logBox.scrollHeight;
+  const l=document.getElementById("log");
+  l.innerHTML+=t+"<br>";
+  l.scrollTop=l.scrollHeight;
 }
-function distanceMeter(lat1,lng1,lat2,lng2){
-  const R=6371000;
-  const dLat=(lat2-lat1)*Math.PI/180;
-  const dLng=(lng2-lng1)*Math.PI/180;
-  const a=Math.sin(dLat/2)**2+
-    Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
-    Math.sin(dLng/2)**2;
-  return Math.round(R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));
-}
-
-/* ===== 狀態（含次數）===== */
-let todayInCount=0;
-let todayOutCount=0;
 
 async function loadStatus(){
-  const data=await(await fetch(API_REC)).json();
-  todayInCount=0;
-  todayOutCount=0;
-  let inTime="",outTime="";
+  const today=new Date().toISOString().slice(0,10);
+  const rec=await (await fetch(API_REC)).json();
 
-  data.forEach(r=>{
-    if(r.name===name&&r.created_at_tw?.startsWith(today)){
-      if(r.action==="上班"){todayInCount++; inTime=r.created_at_tw.slice(11,19);}
-      if(r.action==="下班"){todayOutCount++; outTime=r.created_at_tw.slice(11,19);}
+  inCnt=outCnt=0;lastIn=lastOut="";
+  rec.forEach(r=>{
+    if(r.name===name && r.created_at_tw?.startsWith(today)){
+      if(r.action==="上班"){inCnt++;lastIn=r.created_at_tw.slice(11,19);}
+      if(r.action==="下班"){outCnt++;lastOut=r.created_at_tw.slice(11,19);}
     }
   });
 
-  btnIn.disabled = todayInCount >= MAX_PUNCH_PER_DAY;
-  btnOut.disabled = todayInCount===0 || todayOutCount >= MAX_PUNCH_PER_DAY;
+  document.getElementById("btnIn").disabled=inCnt>=MAX;
+  document.getElementById("btnOut").disabled=inCnt===0||outCnt>=MAX;
 
-  let notice="";
-  let holiday="";
-  for(const h of HOLIDAYS){
-    if(today>=h.start&&today<=h.end){holiday=h.name;break;}
+  let html="";
+  const now=new Date();
+  const hhmm=now.getHours()*100+now.getMinutes();
+  if(hhmm>=910 && inCnt===0){
+    html+=`<div class="marquee"><span>⚠️ 本日尚未上班打卡，請儘速完成 ⚠️</span></div>`;
   }
-  if(holiday) notice=`🎌 今日為 ${holiday}<br>`;
-  else if(now.getDay()===0||now.getDay()===6) notice=`🔴 今日為週末<br>`;
 
-  statusBox.innerHTML=
-    notice+
-    `🟢 上班：${todayInCount?inTime:"尚未"}（${todayInCount}/2）<br>
-     🔵 下班：${todayOutCount?outTime:"—"}（${todayOutCount}/2）`;
+  html+=`🟢 上班：${inCnt?lastIn:"尚未"}（${inCnt}/2）<br>
+         🔵 下班：${outCnt?lastOut:"—"}（${outCnt}/2）`;
+
+  document.getElementById("statusBox").innerHTML=html;
 }
 loadStatus();
 
-/* ===== 打卡（含二次確認）===== */
-function punch(action){
-  const count = action==="上班"?todayInCount:todayOutCount;
-  if(count>=MAX_PUNCH_PER_DAY){
-    alert(`❌ ${action} 已超過今日可操作次數`);
-    return;
-  }
-  if(count===1){
-    if(!confirm(`⚠️ 你今天已經打過一次「${action}」\n是否確定要第二次修正？`)) return;
-  }
+function punch(type){
+  const cnt=type==="上班"?inCnt:outCnt;
+  if(cnt>=MAX)return alert("已達上限");
+  if(cnt===1 && !confirm("第二次打卡為修正，確定？"))return;
 
-  navigator.geolocation.getCurrentPosition(async pos=>{
-    const lat=pos.coords.latitude;
-    const lng=pos.coords.longitude;
-    const dist=distanceMeter(COMPANY_LAT,COMPANY_LNG,lat,lng);
-    log(`📤 送出 ${action}（第 ${count+1} 次）…`);
-
+  navigator.geolocation.getCurrentPosition(async p=>{
     await fetch(API_PUNCH,{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({name,action,lat,lng})
+      body:JSON.stringify({name,action:type,lat:p.coords.latitude,lng:p.coords.longitude})
     });
-
-    log(`✅ ${action} 成功｜距公司 ${dist} m`);
+    log(`✅ ${type} 第 ${cnt+1} 次`);
     loadStatus();
-  },()=>alert("❌ 無法取得 GPS"));
+  });
 }
 
-/* ===== PWA 安裝 ===== */
-let deferredPrompt;
-const btnInstall=document.getElementById("btnInstall");
-window.addEventListener("beforeinstallprompt",e=>{
-  e.preventDefault();
-  deferredPrompt=e;
-  btnInstall.style.display="block";
-});
-btnInstall.addEventListener("click",async()=>{
-  if(!deferredPrompt) return;
-  deferredPrompt.prompt();
-  const {outcome}=await deferredPrompt.userChoice;
-  if(outcome==="accepted") log("⬇ 已開始安裝 App");
-  deferredPrompt=null;
-});
+async function showMonthlyLog(){
+  const ym=new Date().toISOString().slice(0,7);
+  const rec=await (await fetch(API_REC)).json();
+  document.getElementById("log").innerHTML="📅 本月紀錄<br>";
+  rec.filter(r=>r.name===name && r.created_at_tw?.startsWith(ym))
+     .forEach(r=>log(`🕒 ${r.created_at_tw}｜${r.action}`));
+}
 
-/* ===== Service Worker ===== */
 if("serviceWorker"in navigator){
   navigator.serviceWorker.register("./sw.js");
 }
