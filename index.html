@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>UDM ESG｜上班打卡系統</title>
 
-<!-- PWA -->
-<link rel="manifest" href="manifest.webmanifest">
+<!-- ===== PWA ===== -->
+<link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#1e293b">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
 
 <style>
 :root{
@@ -18,13 +18,11 @@
   --success:#16a34a;
   --muted:#64748b;
 }
-
 body{
   margin:0;
   background:linear-gradient(180deg,#0f172a,#020617);
   font-family:system-ui,-apple-system,BlinkMacSystemFont;
 }
-
 header{
   background:linear-gradient(90deg,#020617,#1e293b);
   color:#fff;
@@ -43,18 +41,14 @@ header div{font-size:12px;opacity:.85}
   box-shadow:0 20px 40px rgba(0,0,0,.35);
 }
 
-/* 今日 */
 .today{text-align:center;margin-bottom:10px}
 .today .date{font-size:16px;font-weight:700}
 .today .week{font-size:13px;color:var(--muted)}
 
-/* 姓名 */
 .nameBox{
   margin-top:6px;
   font-size:14px;
-  color:#334155;
   display:flex;
-  align-items:center;
   justify-content:center;
   gap:6px;
 }
@@ -67,7 +61,6 @@ header div{font-size:12px;opacity:.85}
   font-size:12px;
 }
 
-/* 狀態 */
 .status{
   background:#eef2ff;
   padding:12px;
@@ -76,9 +69,8 @@ header div{font-size:12px;opacity:.85}
   font-size:14px;
 }
 
-/* 跑馬燈 */
+/* ===== 跑馬燈 ===== */
 .marquee{
-  background:#dc2626;
   color:#fff;
   padding:10px;
   border-radius:12px;
@@ -96,8 +88,11 @@ header div{font-size:12px;opacity:.85}
   from{transform:translateX(0)}
   to{transform:translateX(-100%)}
 }
+.marquee.info  { background:#2563eb; }
+.marquee.warn  { background:#dc2626; }
+.marquee.leave { background:#f59e0b; }
+.marquee.ok    { background:#16a34a; }
 
-/* 打卡 */
 .actions{display:flex;gap:10px;margin-bottom:14px}
 button{
   flex:1;
@@ -108,11 +103,10 @@ button{
   font-weight:700;
   cursor:pointer;
 }
-button:disabled{opacity:.4;cursor:not-allowed}
+button:disabled{opacity:.4}
 .btn-in{background:var(--success);color:#fff}
 .btn-out{background:var(--primary);color:#fff}
 
-/* 次功能 */
 .sub{display:flex;gap:10px;flex-wrap:wrap}
 .sub button{
   padding:10px;
@@ -121,7 +115,12 @@ button:disabled{opacity:.4;cursor:not-allowed}
   color:#fff;
 }
 
-/* Log */
+#installBtn{
+  display:none;
+  background:#16a34a;
+  color:#fff;
+}
+
 .log{
   margin-top:12px;
   background:#020617;
@@ -147,14 +146,13 @@ button:disabled{opacity:.4;cursor:not-allowed}
   <div class="today">
     <div class="date" id="todayDate"></div>
     <div class="week" id="todayWeek"></div>
-
     <div class="nameBox">
       👤 <span id="userName"></span>
       <button class="editName" onclick="editName()">✏️</button>
     </div>
   </div>
 
-  <div class="status" id="statusBox">讀取今日狀態中…</div>
+  <div class="status" id="statusBox">讀取中…</div>
 
   <div class="actions">
     <button id="btnIn" class="btn-in" onclick="punch('上班')">上班打卡</button>
@@ -165,6 +163,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
     <button onclick="location.href='Leave.html'">📝 請假 / 出差 / 加班</button>
     <button onclick="location.href='HR.html'">📊 HR 總覽</button>
     <button onclick="showMonthlyLog()">📅 本月打卡紀錄</button>
+    <button id="installBtn">📲 下載 App</button>
   </div>
 
   <div class="log" id="log"></div>
@@ -176,50 +175,40 @@ const API_PUNCH = "https://punch-api.jackey1688.workers.dev/api/punch";
 const API_REC   = "https://punch-api.jackey1688.workers.dev/api/records";
 const API_LEAVE = "https://punch-api.jackey1688.workers.dev/api/leave";
 
+/* ===== HR 規則設定 ===== */
+const RULE = {
+  WORK_START: 910,  // 09:10
+  LATE_MIN: 10,    // 遲到分鐘
+  WORK_END: 1800   // 18:00
+};
+
 /* ===== 使用者 ===== */
 let name = localStorage.getItem("name");
 if(!name){
   name = prompt("請輸入姓名");
   localStorage.setItem("name", name);
 }
-document.getElementById("userName").innerText = name;
+userName.innerText = name;
 
 function editName(){
-  const n = prompt("請輸入新的姓名", name);
+  const n = prompt("新姓名", name);
   if(!n) return;
   name = n.trim();
   localStorage.setItem("name", name);
-  document.getElementById("userName").innerText = name;
+  userName.innerText = name;
   loadStatus();
 }
 
-/* ===== 日期 & 星期（台灣時間） ===== */
+/* ===== 日期 ===== */
 function renderToday(){
-  const now = new Date();
-  const week = ["日","一","二","三","四","五","六"];
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth()+1).padStart(2,"0");
-  const dd = String(now.getDate()).padStart(2,"0");
-
-  document.getElementById("todayDate").innerText = `${yyyy}-${mm}-${dd}`;
-  document.getElementById("todayWeek").innerText = `星期${week[now.getDay()]}`;
+  const d = new Date();
+  const w = ["日","一","二","三","四","五","六"];
+  todayDate.innerText = d.toISOString().slice(0,10);
+  todayWeek.innerText = `星期${w[d.getDay()]}`;
 }
 
-/* ===== 狀態 ===== */
-const MAX_PUNCH_PER_DAY = 2;
-let todayInCount = 0;
-let todayOutCount = 0;
+/* ===== 跑馬燈判斷 ===== */
 let leaveCache = [];
-
-const logBox = document.getElementById("log");
-const statusBox = document.getElementById("statusBox");
-const btnIn = document.getElementById("btnIn");
-const btnOut = document.getElementById("btnOut");
-
-function log(t){
-  logBox.innerHTML += t + "<br>";
-  logBox.scrollTop = logBox.scrollHeight;
-}
 
 function isOnLeave(today){
   return leaveCache.some(l =>
@@ -230,7 +219,39 @@ function isOnLeave(today){
   );
 }
 
-/* ===== 載入狀態 ===== */
+function buildMarquee({ now, today, inC, outC }) {
+  const hm = now.getHours()*100 + now.getMinutes();
+
+  if (isOnLeave(today)) {
+    return `<div class="marquee leave"><span>🟡 今日請假中，無需打卡</span></div>`;
+  }
+
+  if (hm >= RULE.WORK_START && inC === 0 && now.getDay()>=1 && now.getDay()<=5) {
+    const late = hm - RULE.WORK_START;
+    if (late > RULE.LATE_MIN) {
+      return `<div class="marquee warn"><span>🔴 已遲到 ${late} 分鐘，請立即打卡</span></div>`;
+    }
+    return `<div class="marquee info"><span>🔵 尚未完成上班打卡，請儘速打卡</span></div>`;
+  }
+
+  if (inC > 0 && outC === 0 && hm >= RULE.WORK_END) {
+    return `<div class="marquee info"><span>🔵 尚未下班打卡，請記得完成</span></div>`;
+  }
+
+  if (inC > 0 && outC > 0) {
+    return `<div class="marquee ok"><span>🟢 今日打卡完成，辛苦了</span></div>`;
+  }
+
+  return "";
+}
+
+/* ===== 狀態 ===== */
+const logBox = log;
+function logMsg(t){
+  logBox.innerHTML += t + "<br>";
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
 async function loadStatus(){
   const now = new Date();
   const today = now.toISOString().slice(0,10);
@@ -238,34 +259,23 @@ async function loadStatus(){
   const rec = await (await fetch(API_REC)).json();
   leaveCache = await (await fetch(API_LEAVE)).json();
 
-  todayInCount = 0;
-  todayOutCount = 0;
-  let inTime="", outTime="";
-
+  let inC=0,outC=0,inT="",outT="";
   rec.forEach(r=>{
     if(r.name===name && r.created_at_tw?.startsWith(today)){
-      if(r.action==="上班"){todayInCount++; inTime=r.created_at_tw.slice(11,19);}
-      if(r.action==="下班"){todayOutCount++; outTime=r.created_at_tw.slice(11,19);}
+      if(r.action==="上班"){inC++;inT=r.created_at_tw.slice(11,19)}
+      if(r.action==="下班"){outC++;outT=r.created_at_tw.slice(11,19)}
     }
   });
 
-  btnIn.disabled = todayInCount >= MAX_PUNCH_PER_DAY;
-  btnOut.disabled = todayInCount===0 || todayOutCount>=MAX_PUNCH_PER_DAY;
+  btnIn.disabled = inC>=2;
+  btnOut.disabled = inC===0||outC>=2;
 
-  let html = "";
-  if(now.getHours()*100 + now.getMinutes() >= 910 &&
-     todayInCount===0 &&
-     now.getDay()!==0 &&
-     now.getDay()!==6 &&
-     !isOnLeave(today)){
-    html += `<div class="marquee"><span>⚠️ 本日尚未上班打卡，請儘速完成打卡作業 ⚠️</span></div>`;
-  }
+  const marquee = buildMarquee({ now, today, inC, outC });
 
-  html += `
-    🟢 上班：${todayInCount?inTime:"尚未"}（${todayInCount}/2）<br>
-    🔵 下班：${todayOutCount?outTime:"—"}（${todayOutCount}/2）
+  statusBox.innerHTML = marquee + `
+    🟢 上班：${inC?inT:"尚未"}（${inC}/2）<br>
+    🔵 下班：${outC?outT:"—"}（${outC}/2）
   `;
-  statusBox.innerHTML = html;
 }
 
 /* ===== 打卡 ===== */
@@ -274,24 +284,41 @@ function punch(action){
     await fetch(API_PUNCH,{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({
-        name, action,
-        lat:pos.coords.latitude,
-        lng:pos.coords.longitude
-      })
+      body:JSON.stringify({name,action,lat:pos.coords.latitude,lng:pos.coords.longitude})
     });
-    log(`✅ ${action} 成功`);
+    logMsg(`✅ ${action} 成功`);
     loadStatus();
-  },()=>alert("❌ 無法取得 GPS"));
+  },()=>alert("❌ GPS 失敗"));
 }
 
-/* ===== 本月紀錄 ===== */
+/* ===== 月紀錄 ===== */
 async function showMonthlyLog(){
-  logBox.innerHTML="📅 本月打卡紀錄<br>---<br>";
-  const data = await (await fetch(API_REC)).json();
-  const ym = new Date().toISOString().slice(0,7);
-  data.filter(r=>r.name===name && r.created_at_tw?.startsWith(ym))
-      .forEach(r=>log(`🕒 ${r.created_at_tw}｜${r.action}`));
+  logBox.innerHTML="";
+  const ym=new Date().toISOString().slice(0,7);
+  const data=await (await fetch(API_REC)).json();
+  data.filter(r=>r.name===name&&r.created_at_tw?.startsWith(ym))
+      .forEach(r=>logMsg(`🕒 ${r.created_at_tw}｜${r.action}`));
+}
+
+/* ===== PWA 安裝 ===== */
+let deferredPrompt=null;
+window.addEventListener("beforeinstallprompt",e=>{
+  e.preventDefault();
+  deferredPrompt=e;
+  installBtn.style.display="block";
+});
+installBtn.onclick=async()=>{
+  if(!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt=null;
+  installBtn.style.display="none";
+};
+window.addEventListener("appinstalled",()=>installBtn.style.display="none");
+
+/* ===== Service Worker ===== */
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("./sw.js");
 }
 
 /* ===== 啟動 ===== */
