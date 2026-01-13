@@ -1,9 +1,9 @@
 {
-  "id": "/index.html",
+  "id": "udm-esg-punch",
   "name": "UDM ESG 上班打卡系統",
   "short_name": "UDM Punch",
   "description": "UDM ESG 員工上班打卡、請假、出差與人資管理系統",
-  "start_url": "./index.html?source=pwa",
+  "start_url": "./index.html?mode=pwa",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
