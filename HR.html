@@ -263,7 +263,7 @@ th{
 .holidayRow{ background:#fff8d6 }
 .holidayText{ color:#d35400; font-weight:bold }
 
-/* 距離 > 20m */
+/* 距離 > 35m */
 .far{
   background:#c0392b;
   color:#fff;
@@ -465,8 +465,8 @@ function buildMiniMap(id, lat, lng){
     .addTo(map)
     .bindTooltip("公司", {permanent:false});
 
-  // 20m 半徑圈
-  L.circle([COMPANY_LAT, COMPANY_LNG], { radius:20, color:"#1f77b4", fillColor:"#1f77b4", fillOpacity:0.2 })
+  // 35m 半徑圈
+  L.circle([COMPANY_LAT, COMPANY_LNG], { radius:35, color:"#1f77b4", fillColor:"#1f77b4", fillOpacity:0.2 })
     .addTo(map);
 
   // 打卡點
@@ -546,7 +546,7 @@ function drawTable(){
       <td>${r.action==="上班" ? time : ""}</td>
       <td>${r.action==="下班" ? time : ""}</td>
       <td>${gpsCell}</td>
-      <td class="${dist!=="" && dist>20 ? "far" : ""}">${dist!=="" ? dist : ""}</td>
+      <td class="${dist!=="" && dist>35 ? "far" : ""}">${dist!=="" ? dist : ""}</td>
       <td>${leave ? leave.type : ""}</td>
       <td>${leave ? (leave.start_date + " ~ " + leave.end_date) : ""}</td>
       <td>${leave ? parseDetail(leave.reason) : ""}</td>
@@ -691,7 +691,7 @@ function applyFarStyle(cell){
    Excel export (.xlsx)
    - 每人一張 Sheet
    - 國定假日/週末底色
-   - 距離 >20m 紅底
+   - 距離 >35m 紅底
    - Daily Summary: 最早上班/最晚下班/最遠距離
 ===================== */
 function exportExcel(){
@@ -756,7 +756,7 @@ document.querySelectorAll("#tbl tr").forEach((tr,i)=>{
       {wch:10},{wch:22},{wch:30},{wch:6}
     ];
 
-    // 逐列套色：假日/週末 + >20m
+    // 逐列套色：假日/週末 + >35m
     for(let i=2;i<=aoa.length;i++){
       const dateCell = ws["A"+i];
       if(!dateCell) continue;
@@ -774,7 +774,7 @@ document.querySelectorAll("#tbl tr").forEach((tr,i)=>{
       }
 
       const distCell = ws["H"+i];
-      if(distCell && Number(distCell.v)>20){
+      if(distCell && Number(distCell.v)>35){
         applyFarStyle(distCell);
       }
     }
@@ -833,7 +833,7 @@ document.querySelectorAll("#tbl tr").forEach((tr,i)=>{
     }
 
     const cellE = wsSum["E"+i];
-    if(cellE && Number(cellE.v)>20){
+    if(cellE && Number(cellE.v)>35){
       applyFarStyle(cellE);
     }
   }
