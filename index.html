@@ -174,6 +174,10 @@ const COMPANY_LNG=121.48416;
 /* ===== 二次機會設定 ===== */
 const MAX_PUNCH_PER_DAY = 2;
 
+/* ===== 打卡冷卻（3 分鐘）===== */
+const COOLDOWN_MS = 3 * 60 * 1000; // 3 分鐘
+const COOLDOWN_KEY = "lastPunchTime";
+
 /* ===== 國定假日 ===== */
 const HOLIDAYS=[
  {start:"2026-02-14",end:"2026-02-22",name:"農曆春節"},
@@ -208,6 +212,7 @@ function editName(){
   localStorage.setItem("name",name);
   document.getElementById("userName").innerText=name;
   log(`👤 已切換使用者：${name}`);
+  loadStatus(); // 切換人員後刷新狀態
 }
 
 /* ===== 今日 ===== */
@@ -232,6 +237,19 @@ function distanceMeter(lat1,lng1,lat2,lng2){
   return Math.round(R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));
 }
 
+/* ===== 冷卻工具 ===== */
+function isInCooldown(){
+  const t = localStorage.getItem(COOLDOWN_KEY);
+  if(!t) return false;
+  return Date.now() - Number(t) < COOLDOWN_MS;
+}
+function cooldownRemainSec(){
+  const t = localStorage.getItem(COOLDOWN_KEY);
+  if(!t) return 0;
+  const remain = COOLDOWN_MS - (Date.now() - Number(t));
+  return Math.max(0, Math.ceil(remain / 1000));
+}
+
 /* ===== 狀態（含次數）===== */
 let todayInCount=0;
 let todayOutCount=0;
@@ -243,40 +261,54 @@ async function loadStatus(){
   let inTime="",outTime="";
 
   data.forEach(r=>{
-    if(r.name===name&&r.created_at_tw?.startsWith(today)){
+    if(r.name===name && r.created_at_tw?.startsWith(today)){
       if(r.action==="上班"){todayInCount++; inTime=r.created_at_tw.slice(11,19);}
       if(r.action==="下班"){todayOutCount++; outTime=r.created_at_tw.slice(11,19);}
     }
   });
 
+  // 先依「次數規則」設定 disabled
   btnIn.disabled = todayInCount >= MAX_PUNCH_PER_DAY;
   btnOut.disabled = todayInCount===0 || todayOutCount >= MAX_PUNCH_PER_DAY;
 
   let notice="";
   let holiday="";
   for(const h of HOLIDAYS){
-    if(today>=h.start&&today<=h.end){holiday=h.name;break;}
+    if(today>=h.start && today<=h.end){holiday=h.name;break;}
   }
   if(holiday) notice=`🎌 今日為 ${holiday}<br>`;
-  else if(now.getDay()===0||now.getDay()===6) notice=`🔴 今日為週末<br>`;
-else {
-  const hhmm = now.getHours() * 100 + now.getMinutes();
-
-  // 09:10 之後，尚未上班打卡
-  if (hhmm >= 910 && todayInCount === 0) {
-    notice = `🔴 您尚未打卡，請速打卡<br>`;
+  else if(now.getDay()===0 || now.getDay()===6) notice=`🔴 今日為週末<br>`;
+  else {
+    const hhmm = now.getHours() * 100 + now.getMinutes();
+    // 09:10 之後，尚未上班打卡
+    if (hhmm >= 910 && todayInCount === 0) {
+      notice = `🔴 您尚未打卡，請速打卡<br>`;
+    }
   }
-}
 
   statusBox.innerHTML=
     notice+
     `🟢 上班：${todayInCount?inTime:"尚未"}（${todayInCount}/2）<br>
      🔵 下班：${todayOutCount?outTime:"—"}（${todayOutCount}/2）`;
+
+  // 再套「冷卻規則」：冷卻期間一律鎖住兩顆按鈕（覆蓋次數規則）
+  if(isInCooldown()){
+    const sec = cooldownRemainSec();
+    btnIn.disabled = true;
+    btnOut.disabled = true;
+    statusBox.innerHTML += `<br>⏳ 打卡冷卻中，剩餘 ${sec} 秒`;
+  }
 }
 loadStatus();
 
-/* ===== 打卡（含二次確認）===== */
+/* ===== 打卡（含二次確認 + 3分鐘冷卻）===== */
 function punch(action){
+  // 冷卻中禁止
+  if(isInCooldown()){
+    alert(`⏳ 剛完成打卡，請 ${cooldownRemainSec()} 秒後再操作`);
+    return;
+  }
+
   const count = action==="上班"?todayInCount:todayOutCount;
   if(count>=MAX_PUNCH_PER_DAY){
     alert(`❌ ${action} 已超過今日可操作次數`);
@@ -290,6 +322,7 @@ function punch(action){
     const lat=pos.coords.latitude;
     const lng=pos.coords.longitude;
     const dist=distanceMeter(COMPANY_LAT,COMPANY_LNG,lat,lng);
+
     log(`📤 送出 ${action}（第 ${count+1} 次）…`);
 
     await fetch(API_PUNCH,{
@@ -298,8 +331,29 @@ function punch(action){
       body:JSON.stringify({name,action,lat,lng})
     });
 
+    // 成功後啟動 3 分鐘冷卻
+    localStorage.setItem(COOLDOWN_KEY, String(Date.now()));
+
     log(`✅ ${action} 成功｜距公司 ${dist} m`);
     loadStatus();
+
+    // 額外：每秒刷新冷卻倒數顯示（到 0 自動停）
+    const timer = setInterval(()=>{
+      if(!isInCooldown()){
+        clearInterval(timer);
+        loadStatus();
+        return;
+      }
+      // 不重拉 API，只更新顯示（避免浪費流量）
+      const sec = cooldownRemainSec();
+      btnIn.disabled = true;
+      btnOut.disabled = true;
+      // 保留原本狀態文字 + 倒數（簡化：直接觸發 loadStatus 會拉 API，所以這裡只更新尾巴）
+      // 若你希望「倒數精準且狀態也同步」可以改成每 10 秒 loadStatus 一次
+      const base = statusBox.innerHTML.split("<br>⏳")[0];
+      statusBox.innerHTML = base + `<br>⏳ 打卡冷卻中，剩餘 ${sec} 秒`;
+    }, 1000);
+
   },()=>alert("❌ 無法取得 GPS"));
 }
 
@@ -320,9 +374,10 @@ btnInstall.addEventListener("click",async()=>{
 });
 
 /* ===== Service Worker ===== */
-if("serviceWorker"in navigator){
+if("serviceWorker" in navigator){
   navigator.serviceWorker.register("./sw.js");
 }
+
 /* ===== 當月每日打卡紀錄 ===== */
 let monthlyVisible = false;
 
@@ -372,6 +427,7 @@ async function loadMonthly(){
 
   box.innerHTML = html;
 }
+
 
 </script>
 
