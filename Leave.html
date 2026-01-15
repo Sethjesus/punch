@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>UDM ESG｜請假 / 加班 / 出差申請</title>
+<title>UDM ESG｜請假 / 補修申請</title>
 
 <style>
 body{background:#3f3f3f;font-family:system-ui}
@@ -41,7 +41,7 @@ hr{margin:12px 0}
 <body>
 
 <div class="card">
-  <h3>請假 / 加班 / 出差 / 忘記打卡</h3>
+  <h3>請假 / 加班 / 出差 / 忘記打卡 / 補修</h3>
 
   <button class="secondary" onclick="goHome()">← 回打卡首頁</button>
 
@@ -58,6 +58,7 @@ hr{margin:12px 0}
     <option>加班</option>
     <option>出差</option>
     <option>忘記打卡</option>
+    <option>補修</option>
   </select>
 
   <label>開始日期</label>
@@ -72,7 +73,7 @@ hr{margin:12px 0}
   <label>結束時間</label>
   <input type="time" id="et" value="18:00">
 
-  <textarea id="reason" placeholder="補充說明（選填）"></textarea>
+  <textarea id="reason" placeholder="補充說明（必填）"></textarea>
 
   <button class="primary" onclick="submit()">送出申請</button>
 
@@ -91,11 +92,11 @@ const API_WITHDRAW = "https://punch-api.jackey1688.workers.dev/api/leave/withdra
 /* =====================
    Utils
 ===================== */
-function qs(id){ return document.getElementById(id); }
-function esc(s){ return (s||"").replace(/\n/g,"<br>"); }
-function goHome(){ location.href="https://sethjesus.github.io/punch/"; }
+const qs = id => document.getElementById(id);
+const esc = s => (s||"").replace(/\n/g,"<br>");
+const goHome = () => location.href="https://sethjesus.github.io/punch/";
 
-/* ===== 狀態唯一判斷 ===== */
+/* ===== 狀態判斷 ===== */
 function getStatus(l){
   if(l.withdrawn === 1) return "withdrawn";
   if(l.approved  === 1) return "approved";
@@ -103,18 +104,26 @@ function getStatus(l){
 }
 
 /* =====================
-   忘記打卡邏輯
+   類型切換邏輯
 ===================== */
 function onTypeChange(){
   const type = qs("type").value;
+  const today = new Date().toISOString().slice(0,10);
 
   if(type === "忘記打卡"){
-    const today = new Date().toISOString().slice(0,10);
     qs("sd").value = today;
     qs("ed").value = today;
     qs("st").value = "09:00";
     qs("et").value = "18:00";
     qs("reason").value = "";
+  }
+
+  if(type === "補修"){
+    qs("sd").value = today;
+    qs("ed").value = today;
+    qs("st").value = "09:00";
+    qs("et").value = "18:00";
+    qs("reason").value = "補修原因：";
   }
 }
 
@@ -138,27 +147,20 @@ async function loadList(){
 
   mine.sort((a,b)=>b.id-a.id).forEach(l=>{
     const status = getStatus(l);
-    const statusText = {
-      pending:"審核中",
-      approved:"已核准",
-      withdrawn:"已撤回"
-    }[status];
+    const text = {pending:"審核中",approved:"已核准",withdrawn:"已撤回"}[status];
 
     box.innerHTML += `
       <div class="item">
         <div>
-          <span class="badge ${status}">${statusText}</span>
+          <span class="badge ${status}">${text}</span>
           <b>${l.type}</b>
         </div>
         <div class="small">${l.start_date} ~ ${l.end_date}</div>
         <div class="small">${esc(l.reason)}</div>
-        ${
-          status==="pending"
+        ${status==="pending"
           ? `<button class="danger" onclick="withdraw(${l.id})">撤回</button>`
-          : ``
-        }
-      </div>
-    `;
+          : ``}
+      </div>`;
   });
 }
 
@@ -168,13 +170,13 @@ async function loadList(){
 async function submit(){
   const name = qs("name").value.trim();
   const type = qs("type").value;
-  const sd   = qs("sd").value;
-  const st   = qs("st").value;
-  const ed   = qs("ed").value;
-  const et   = qs("et").value;
+  const sd = qs("sd").value;
+  const st = qs("st").value;
+  const ed = qs("ed").value;
+  const et = qs("et").value;
   const reason = qs("reason").value.trim();
 
-  if(!name||!type||!sd||!st||!ed||!et){
+  if(!name||!type||!sd||!st||!ed||!et||!reason){
     alert("請填寫完整資料"); return;
   }
 
