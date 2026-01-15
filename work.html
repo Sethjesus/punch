@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>HR 打卡後台</title>
+<style>
+body{font-family:sans-serif;background:#f5f5f5}
+.card{max-width:1100px;margin:30px auto;background:#fff;padding:20px;border-radius:12px}
+input,button{padding:8px;margin-right:6px}
+table{width:100%;border-collapse:collapse;margin-top:16px}
+th,td{border-bottom:1px solid #ddd;padding:8px;text-align:center}
+th{background:#f0f0f0}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h2>📋 HR 打卡後台</h2>
+
+  工號 <input id="empId">
+  姓名 <input id="name">
+  <button onclick="loadData()">查詢</button>
+  <button onclick="exportExcel()">匯出 Excel</button>
+
+  <table>
+    <thead>
+      <tr>
+        <th>工號</th>
+        <th>姓名</th>
+        <th>動作</th>
+        <th>距離(m)</th>
+        <th>日期</th>
+        <th>星期</th>
+        <th>時間</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+const WORKER_URL = "https://你的-worker.workers.dev";
+
+let cache = [];
+
+function loadData(){
+  const empId = document.getElementById("empId").value;
+  const name = document.getElementById("name").value;
+
+  const qs = new URLSearchParams({ emp_id: empId, name }).toString();
+
+  fetch(`${WORKER_URL}/api/admin/attendance?${qs}`)
+    .then(r => r.json())
+    .then(data => {
+      cache = data;
+      render(data);
+    });
+}
+
+function render(data){
+  const tb = document.getElementById("tbody");
+  tb.innerHTML = "";
+
+  data.forEach(r => {
+    const d = new Date(r.time);
+    tb.innerHTML += `
+      <tr>
+        <td>${r.emp_id}</td>
+        <td>${r.name}</td>
+        <td>${r.action}</td>
+        <td>${r.distance ?? ""}</td>
+        <td>${d.toLocaleDateString()}</td>
+        <td>${["日","一","二","三","四","五","六"][d.getDay()]}</td>
+        <td>${d.toLocaleTimeString()}</td>
+      </tr>`;
+  });
+}
+
+function exportExcel(){
+  let csv = "工號,姓名,動作,距離,日期,星期,時間\n";
+
+  cache.forEach(r=>{
+    const d = new Date(r.time);
+    csv += [
+      r.emp_id,
+      r.name,
+      r.action,
+      r.distance ?? "",
+      d.toLocaleDateString(),
+      ["日","一","二","三","四","五","六"][d.getDay()],
+      d.toLocaleTimeString()
+    ].join(",") + "\n";
+  });
+
+  const blob = new Blob([csv],{type:"application/vnd.ms-excel"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "attendance.xls";
+  a.click();
+}
+</script>
+
+</body>
+</html>
