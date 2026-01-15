@@ -41,13 +41,13 @@ hr{margin:12px 0}
 <body>
 
 <div class="card">
-  <h3>請假 / 加班 / 出差申請</h3>
+  <h3>請假 / 加班 / 出差 / 忘記打卡</h3>
 
   <button class="secondary" onclick="goHome()">← 回打卡首頁</button>
 
   <input id="name" placeholder="姓名">
 
-  <select id="type">
+  <select id="type" onchange="onTypeChange()">
     <option value="">請選擇類型</option>
     <option>婚假</option>
     <option>喪假</option>
@@ -57,6 +57,7 @@ hr{margin:12px 0}
     <option>特休</option>
     <option>加班</option>
     <option>出差</option>
+    <option>忘記打卡</option>
   </select>
 
   <label>開始日期</label>
@@ -94,11 +95,27 @@ function qs(id){ return document.getElementById(id); }
 function esc(s){ return (s||"").replace(/\n/g,"<br>"); }
 function goHome(){ location.href="https://sethjesus.github.io/punch/"; }
 
-/* ===== 狀態唯一判斷（關鍵）===== */
+/* ===== 狀態唯一判斷 ===== */
 function getStatus(l){
   if(l.withdrawn === 1) return "withdrawn";
   if(l.approved  === 1) return "approved";
   return "pending";
+}
+
+/* =====================
+   忘記打卡邏輯
+===================== */
+function onTypeChange(){
+  const type = qs("type").value;
+
+  if(type === "忘記打卡"){
+    const today = new Date().toISOString().slice(0,10);
+    qs("sd").value = today;
+    qs("ed").value = today;
+    qs("st").value = "09:00";
+    qs("et").value = "18:00";
+    qs("reason").value = "忘記打卡申請\n原因說明：";
+  }
 }
 
 /* =====================
@@ -121,11 +138,10 @@ async function loadList(){
 
   mine.sort((a,b)=>b.id-a.id).forEach(l=>{
     const status = getStatus(l);
-
     const statusText = {
-      pending:   "審核中",
-      approved:  "已核准",
-      withdrawn: "已撤回"
+      pending:"審核中",
+      approved:"已核准",
+      withdrawn:"已撤回"
     }[status];
 
     box.innerHTML += `
@@ -134,14 +150,12 @@ async function loadList(){
           <span class="badge ${status}">${statusText}</span>
           <b>${l.type}</b>
         </div>
-
         <div class="small">${l.start_date} ~ ${l.end_date}</div>
         <div class="small">${esc(l.reason)}</div>
-
         ${
-          status === "pending"
-            ? `<button class="danger" onclick="withdraw(${l.id})">撤回</button>`
-            : ``
+          status==="pending"
+          ? `<button class="danger" onclick="withdraw(${l.id})">撤回</button>`
+          : ``
         }
       </div>
     `;
@@ -168,7 +182,7 @@ async function submit(){
 `【${type}】
 開始：${sd} ${st}
 結束：${ed} ${et}
-${reason ? "說明："+reason : ""}`;
+${reason}`;
 
   await fetch(API_LEAVE,{
     method:"POST",
