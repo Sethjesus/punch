@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>UDM ESG｜上班打卡系統</title>
 
-<!-- PWA -->
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1e293b">
 <link rel="apple-touch-icon" href="icon-192.png">
 
 <style>
+/* ===== 色彩變數 ===== */
 :root{
   --bg:#0f172a;
   --card:#f8fafc;
@@ -18,19 +18,30 @@
   --success:#16a34a;
   --muted:#64748b;
 }
+
+/* ===== 基本樣式 ===== */
 body{
   margin:0;
   background:linear-gradient(180deg,#0f172a,#020617);
   font-family:system-ui,-apple-system,BlinkMacSystemFont;
 }
+
 header{
   background:linear-gradient(90deg,#020617,#1e293b);
   color:#fff;
   padding:16px;
   text-align:center;
 }
-header h1{margin:0;font-size:20px}
-header div{font-size:12px;opacity:.85}
+
+header h1{
+  margin:0;
+  font-size:20px;
+}
+
+header div{
+  font-size:12px;
+  opacity:.85;
+}
 
 .container{
   max-width:420px;
@@ -41,12 +52,23 @@ header div{font-size:12px;opacity:.85}
   box-shadow:0 20px 40px rgba(0,0,0,.35);
 }
 
-/* 今日 */
-.today{text-align:center;margin-bottom:10px}
-.today .date{font-size:16px;font-weight:700}
-.today .week{font-size:13px;color:var(--muted)}
+/* ===== 今日 ===== */
+.today{
+  text-align:center;
+  margin-bottom:10px;
+}
 
-/* 姓名 */
+.today .date{
+  font-size:16px;
+  font-weight:700;
+}
+
+.today .week{
+  font-size:13px;
+  color:var(--muted);
+}
+
+/* ===== 姓名 ===== */
 .nameBox{
   margin-top:6px;
   font-size:14px;
@@ -56,6 +78,7 @@ header div{font-size:12px;opacity:.85}
   justify-content:center;
   gap:6px;
 }
+
 .editName{
   border:0;
   background:#e5e7eb;
@@ -65,7 +88,7 @@ header div{font-size:12px;opacity:.85}
   font-size:12px;
 }
 
-/* 狀態 */
+/* ===== 狀態 ===== */
 .status{
   background:#eef2ff;
   padding:12px;
@@ -74,8 +97,13 @@ header div{font-size:12px;opacity:.85}
   font-size:14px;
 }
 
-/* 打卡 */
-.actions{display:flex;gap:10px;margin-bottom:14px}
+/* ===== 打卡 ===== */
+.actions{
+  display:flex;
+  gap:10px;
+  margin-bottom:14px;
+}
+
 button{
   flex:1;
   padding:14px;
@@ -85,12 +113,29 @@ button{
   font-weight:700;
   cursor:pointer;
 }
-button:disabled{opacity:.4;cursor:not-allowed}
-.btn-in{background:var(--success);color:#fff}
-.btn-out{background:var(--primary);color:#fff}
 
-/* 次功能 */
-.sub{display:flex;gap:10px;flex-wrap:wrap}
+button:disabled{
+  opacity:.4;
+  cursor:not-allowed;
+}
+
+.btn-in{
+  background:var(--success);
+  color:#fff;
+}
+
+.btn-out{
+  background:var(--primary);
+  color:#fff;
+}
+
+/* ===== 次功能 ===== */
+.sub{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
 .sub button{
   padding:10px;
   font-size:13px;
@@ -98,14 +143,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
   color:#fff;
 }
 
-/* 安裝按鍵 */
-#btnInstall{
-  background:#f59e0b;
-  color:#111827;
-  font-weight:800;
-}
-
-/* Log */
+/* ===== Log ===== */
 .log{
   margin-top:12px;
   background:#020617;
@@ -151,284 +189,177 @@ button:disabled{opacity:.4;cursor:not-allowed}
 
   <!-- 次功能 -->
   <div class="sub">
-    <button onclick="location.href='Leave.html'">📝 請假 / 出差 / 加班</button>
+    <button onclick="location.href='Leave.html'">📝 請假 / 出差 / 會議</button>
     <button onclick="location.href='HR.html'">📊 HR 總覽</button>
-    <button onclick="toggleMonthly()">📅 當月打卡紀錄</button>
-    <button id="btnInstall" style="display:none">⬇ 下載 App</button>
   </div>
 
   <!-- Log -->
   <div class="log" id="log"></div>
-  <div class="log" id="monthlyBox" style="display:none"></div>
+
 </div>
 
 <script>
-/* ===== API ===== */
-const API_PUNCH="https://punch-api.jackey1688.workers.dev/api/punch";
-const API_REC="https://punch-api.jackey1688.workers.dev/api/records";
+/* =====================================================
+   API 定義
+===================================================== */
+const API_PUNCH  = "https://punch-api.jackey1688.workers.dev/api/punch";
+const API_REC    = "https://punch-api.jackey1688.workers.dev/api/records";
+const API_LEAVE  = "https://punch-api.jackey1688.workers.dev/api/leave";
 
-/* ===== 公司座標 ===== */
-const COMPANY_LAT=25.00657;
-const COMPANY_LNG=121.48416;
+/* =====================================================
+   DOM
+===================================================== */
+const statusBox = document.getElementById("statusBox");
+const btnIn     = document.getElementById("btnIn");
+const btnOut    = document.getElementById("btnOut");
+const logBox    = document.getElementById("log");
 
-/* ===== 二次機會設定 ===== */
-const MAX_PUNCH_PER_DAY = 2;
-
-/* ===== 打卡冷卻（3 分鐘）===== */
-const COOLDOWN_MS = 3 * 60 * 1000; // 3 分鐘
-const COOLDOWN_KEY = "lastPunchTime";
-
-/* ===== 國定假日 ===== */
-const HOLIDAYS=[
- {start:"2026-02-14",end:"2026-02-22",name:"農曆春節"},
- {start:"2026-02-27",end:"2026-03-01",name:"228連假"},
- {start:"2026-04-03",end:"2026-04-06",name:"清明連假"},
- {start:"2026-05-01",end:"2026-05-03",name:"勞動節連假"},
- {start:"2026-06-19",end:"2026-06-21",name:"端午連假"},
- {start:"2026-09-25",end:"2026-09-28",name:"中秋/教師節"},
- {start:"2026-10-09",end:"2026-10-11",name:"國慶連假"},
- {start:"2026-10-24",end:"2026-10-26",name:"光復節"},
- {start:"2026-12-25",end:"2026-12-27",name:"行憲紀念日"}
-];
-
-/* ===== DOM ===== */
-const logBox=document.getElementById("log");
-const statusBox=document.getElementById("statusBox");
-const btnIn=document.getElementById("btnIn");
-const btnOut=document.getElementById("btnOut");
-
-/* ===== 姓名 ===== */
-let name=localStorage.getItem("name");
+/* =====================================================
+   使用者
+===================================================== */
+let name = localStorage.getItem("name");
 if(!name){
-  name=prompt("請輸入姓名");
-  localStorage.setItem("name",name);
+  name = prompt("請輸入姓名");
+  localStorage.setItem("name", name);
 }
-document.getElementById("userName").innerText=name;
+document.getElementById("userName").innerText = name;
 
 function editName(){
-  const newName=prompt("請輸入新的姓名",name);
+  const newName = prompt("請輸入新的姓名", name);
   if(!newName) return;
-  name=newName.trim();
-  localStorage.setItem("name",name);
-  document.getElementById("userName").innerText=name;
-  log(`👤 已切換使用者：${name}`);
-  loadStatus(); // 切換人員後刷新狀態
+  name = newName.trim();
+  localStorage.setItem("name", name);
+  document.getElementById("userName").innerText = name;
+  log("👤 已切換使用者：" + name);
+  loadStatus();
 }
 
-/* ===== 今日 ===== */
-const now=new Date();
-const today=now.toISOString().slice(0,10);
-const map=["日","一","二","三","四","五","六"];
-document.getElementById("todayDate").innerText=today;
-document.getElementById("todayWeek").innerText="週"+map[now.getDay()];
+/* =====================================================
+   今日日期
+===================================================== */
+const now   = new Date();
+const today = now.toISOString().slice(0,10);
+const map   = ["日","一","二","三","四","五","六"];
 
-/* ===== 工具 ===== */
-function log(t){
-  logBox.innerHTML+=t+"<br>";
-  logBox.scrollTop=logBox.scrollHeight;
-}
-function distanceMeter(lat1,lng1,lat2,lng2){
-  const R=6371000;
-  const dLat=(lat2-lat1)*Math.PI/180;
-  const dLng=(lng2-lng1)*Math.PI/180;
-  const a=Math.sin(dLat/2)**2+
-    Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
-    Math.sin(dLng/2)**2;
-  return Math.round(R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));
+document.getElementById("todayDate").innerText = today;
+document.getElementById("todayWeek").innerText = "週" + map[now.getDay()];
+
+/* =====================================================
+   工具
+===================================================== */
+function log(msg){
+  logBox.innerHTML += msg + "<br>";
+  logBox.scrollTop = logBox.scrollHeight;
 }
 
-/* ===== 冷卻工具 ===== */
-function isInCooldown(){
-  const t = localStorage.getItem(COOLDOWN_KEY);
-  if(!t) return false;
-  return Date.now() - Number(t) < COOLDOWN_MS;
-}
-function cooldownRemainSec(){
-  const t = localStorage.getItem(COOLDOWN_KEY);
-  if(!t) return 0;
-  const remain = COOLDOWN_MS - (Date.now() - Number(t));
-  return Math.max(0, Math.ceil(remain / 1000));
+function dateAdd(dateStr, days){
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0,10);
 }
 
-/* ===== 狀態（含次數）===== */
-let todayInCount=0;
-let todayOutCount=0;
-
+/* =====================================================
+   狀態載入（攤開版）
+===================================================== */
 async function loadStatus(){
-  const data=await(await fetch(API_REC)).json();
-  todayInCount=0;
-  todayOutCount=0;
-  let inTime="",outTime="";
 
-  data.forEach(r=>{
-    if(r.name===name && r.created_at_tw?.startsWith(today)){
-      if(r.action==="上班"){todayInCount++; inTime=r.created_at_tw.slice(11,19);}
-      if(r.action==="下班"){todayOutCount++; outTime=r.created_at_tw.slice(11,19);}
-    }
-  });
+  /* ---------- 1. 讀取打卡紀錄 ---------- */
+  const records = await (await fetch(API_REC)).json();
 
-  // 先依「次數規則」設定 disabled
-  btnIn.disabled = todayInCount >= MAX_PUNCH_PER_DAY;
-  btnOut.disabled = todayInCount===0 || todayOutCount >= MAX_PUNCH_PER_DAY;
+  let todayInCount  = 0;
+  let todayOutCount = 0;
+  let inTime  = "";
+  let outTime = "";
 
-  let notice="";
-  let holiday="";
-  for(const h of HOLIDAYS){
-    if(today>=h.start && today<=h.end){holiday=h.name;break;}
-  }
-  if(holiday) notice=`🎌 今日為 ${holiday}<br>`;
-  else if(now.getDay()===0 || now.getDay()===6) notice=`🔴 今日為週末<br>`;
-  else {
-    const hhmm = now.getHours() * 100 + now.getMinutes();
-    // 09:10 之後，尚未上班打卡
-    if (hhmm >= 910 && todayInCount === 0) {
-      notice = `🔴 您尚未打卡，請速打卡<br>`;
+  for(let i=0;i<records.length;i++){
+    const r = records[i];
+    if(r.name === name && r.created_at_tw && r.created_at_tw.startsWith(today)){
+      if(r.action === "上班"){
+        todayInCount++;
+        inTime = r.created_at_tw.slice(11,19);
+      }
+      if(r.action === "下班"){
+        todayOutCount++;
+        outTime = r.created_at_tw.slice(11,19);
+      }
     }
   }
 
-  statusBox.innerHTML=
-    notice+
-    `🟢 上班：${todayInCount?inTime:"尚未"}（${todayInCount}/2）<br>
-     🔵 下班：${todayOutCount?outTime:"—"}（${todayOutCount}/2）`;
+  /* ---------- 2. 讀取請假 / 出差 / 會議 ---------- */
+  let tripNotice = "";
 
-  // 再套「冷卻規則」：冷卻期間一律鎖住兩顆按鈕（覆蓋次數規則）
-  if(isInCooldown()){
-    const sec = cooldownRemainSec();
-    btnIn.disabled = true;
-    btnOut.disabled = true;
-    statusBox.innerHTML += `<br>⏳ 打卡冷卻中，剩餘 ${sec} 秒`;
+  try{
+    const leaves = await (await fetch(API_LEAVE)).json();
+
+    for(let j=0;j<leaves.length;j++){
+      const l = leaves[j];
+
+      if(l.name !== name){
+        continue;
+      }
+
+      if(l.type === "出差"){
+        if(today === l.start_date){
+          tripNotice = "📌 今日有【出差】行程<br>";
+        }
+        if(today === dateAdd(l.start_date,-1)){
+          tripNotice = "📌 明日有【出差】行程<br>";
+        }
+      }
+
+      if(l.type === "會議"){
+        if(today === l.start_date){
+          tripNotice = "📌 今日有【會議】行程<br>";
+        }
+        if(today === dateAdd(l.start_date,-1)){
+          tripNotice = "📌 明日有【會議】行程<br>";
+        }
+      }
+    }
+  }catch(e){
+    console.warn("讀取出差 / 會議失敗", e);
   }
+
+  /* ---------- 3. 按鈕狀態 ---------- */
+  btnIn.disabled  = todayInCount >= 2;
+  btnOut.disabled = todayInCount === 0 || todayOutCount >= 2;
+
+  /* ---------- 4. 組合顯示 ---------- */
+  let html = "";
+
+  if(tripNotice !== ""){
+    html += tripNotice;
+  }
+
+  html += "🟢 上班：" + (todayInCount ? inTime : "尚未") + "<br>";
+  html += "🔵 下班：" + (todayOutCount ? outTime : "—") + "<br>";
+
+  statusBox.innerHTML = html;
 }
-loadStatus();
 
-/* ===== 打卡（含二次確認 + 3分鐘冷卻）===== */
+/* =====================================================
+   打卡
+===================================================== */
 function punch(action){
-  // 冷卻中禁止
-  if(isInCooldown()){
-    alert(`⏳ 剛完成打卡，請 ${cooldownRemainSec()} 秒後再操作`);
-    return;
-  }
-
-  const count = action==="上班"?todayInCount:todayOutCount;
-  if(count>=MAX_PUNCH_PER_DAY){
-    alert(`❌ ${action} 已超過今日可操作次數`);
-    return;
-  }
-  if(count===1){
-    if(!confirm(`⚠️ 你今天已經打過一次「${action}」\n是否確定要第二次修正？`)) return;
-  }
-
   navigator.geolocation.getCurrentPosition(async pos=>{
-    const lat=pos.coords.latitude;
-    const lng=pos.coords.longitude;
-    const dist=distanceMeter(COMPANY_LAT,COMPANY_LNG,lat,lng);
-
-    log(`📤 送出 ${action}（第 ${count+1} 次）…`);
-
     await fetch(API_PUNCH,{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({name,action,lat,lng})
+      body:JSON.stringify({
+        name:name,
+        action:action,
+        lat:pos.coords.latitude,
+        lng:pos.coords.longitude
+      })
     });
-
-    // 成功後啟動 3 分鐘冷卻
-    localStorage.setItem(COOLDOWN_KEY, String(Date.now()));
-
-    log(`✅ ${action} 成功｜距公司 ${dist} m`);
+    log("✅ " + action + " 完成");
     loadStatus();
-
-    // 額外：每秒刷新冷卻倒數顯示（到 0 自動停）
-    const timer = setInterval(()=>{
-      if(!isInCooldown()){
-        clearInterval(timer);
-        loadStatus();
-        return;
-      }
-      // 不重拉 API，只更新顯示（避免浪費流量）
-      const sec = cooldownRemainSec();
-      btnIn.disabled = true;
-      btnOut.disabled = true;
-      // 保留原本狀態文字 + 倒數（簡化：直接觸發 loadStatus 會拉 API，所以這裡只更新尾巴）
-      // 若你希望「倒數精準且狀態也同步」可以改成每 10 秒 loadStatus 一次
-      const base = statusBox.innerHTML.split("<br>⏳")[0];
-      statusBox.innerHTML = base + `<br>⏳ 打卡冷卻中，剩餘 ${sec} 秒`;
-    }, 1000);
-
-  },()=>alert("❌ 無法取得 GPS"));
-}
-
-/* ===== PWA 安裝 ===== */
-let deferredPrompt;
-const btnInstall=document.getElementById("btnInstall");
-window.addEventListener("beforeinstallprompt",e=>{
-  e.preventDefault();
-  deferredPrompt=e;
-  btnInstall.style.display="block";
-});
-btnInstall.addEventListener("click",async()=>{
-  if(!deferredPrompt) return;
-  deferredPrompt.prompt();
-  const {outcome}=await deferredPrompt.userChoice;
-  if(outcome==="accepted") log("⬇ 已開始安裝 App");
-  deferredPrompt=null;
-});
-
-/* ===== Service Worker ===== */
-if("serviceWorker" in navigator){
-  navigator.serviceWorker.register("./sw.js");
-}
-
-/* ===== 當月每日打卡紀錄 ===== */
-let monthlyVisible = false;
-
-function toggleMonthly(){
-  const box = document.getElementById("monthlyBox");
-  monthlyVisible = !monthlyVisible;
-  box.style.display = monthlyVisible ? "block" : "none";
-  if(monthlyVisible) loadMonthly();
-}
-
-async function loadMonthly(){
-  const box = document.getElementById("monthlyBox");
-  box.innerHTML = "讀取當月打卡紀錄中…";
-
-  const data = await (await fetch(API_REC)).json();
-
-  const ym = today.slice(0,7); // YYYY-MM
-  const records = data.filter(r =>
-    r.name === name &&
-    r.created_at_tw?.startsWith(ym)
-  );
-
-  // 依日期分組
-  const byDate = {};
-  records.forEach(r=>{
-    const d = r.created_at_tw.slice(0,10);
-    if(!byDate[d]) byDate[d] = [];
-    byDate[d].push(r);
+  },()=>{
+    alert("❌ 無法取得 GPS");
   });
-
-  let html = `📆 ${ym} 每日打卡紀錄<br>====================<br>`;
-
-  Object.keys(byDate).sort().forEach(date=>{
-    const dObj = new Date(date);
-    const week = map[dObj.getDay()];
-
-    html += `<br>📅 ${date}（週${week}）<br>`;
-
-    byDate[date].forEach(r=>{
-      html += `　🕒 ${r.created_at_tw.slice(11,19)}｜${r.action}<br>`;
-    });
-  });
-
-  if(records.length === 0){
-    html += "本月尚無任何打卡紀錄<br>";
-  }
-
-  box.innerHTML = html;
 }
 
-
+loadStatus();
 </script>
 
 </body>

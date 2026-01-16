@@ -41,7 +41,7 @@ hr{margin:12px 0}
 <body>
 
 <div class="card">
-  <h3>請假 / 加班 / 出差 / 忘記打卡 / 補修</h3>
+  <h3>請假 / 加班 / 出差 / 會議 / 補修</h3>
 
   <button class="secondary" onclick="goHome()">← 回打卡首頁</button>
 
@@ -57,6 +57,7 @@ hr{margin:12px 0}
     <option>特休</option>
     <option>加班</option>
     <option>出差</option>
+    <option>會議</option>
     <option>忘記打卡</option>
     <option>補修</option>
   </select>
@@ -104,7 +105,7 @@ function getStatus(l){
 }
 
 /* =====================
-   類型切換邏輯
+   類型切換邏輯（整合完成）
 ===================== */
 function onTypeChange(){
   const type = qs("type").value;
@@ -124,6 +125,14 @@ function onTypeChange(){
     qs("st").value = "09:00";
     qs("et").value = "18:00";
     qs("reason").value = "補修原因：";
+  }
+
+  if(type === "會議"){
+    qs("sd").value = today;
+    qs("ed").value = today;
+    qs("st").value = "09:00";
+    qs("et").value = "18:00";
+    qs("reason").value = "會議主題／地點／與會人員：";
   }
 }
 
