@@ -371,15 +371,32 @@ function drawTable(){
     <th>主管註解</th>
   </tr>`;
 
+  // 排序 records 按日期倒序（最新在上）
+  const sortedRecords = [...records].sort((a, b) => {
+    return (b.created_at_tw || "").localeCompare(a.created_at_tw || "");
+  });
+
   /* ===== 打卡 rows ===== */
-  records.forEach(r=>{
+  sortedRecords.forEach(r=>{
     const date = r.created_at_tw?.slice(0,10);
     if(!date) return;
     if(month && !date.startsWith(month)) return;
 
-    const w = weekdayInfo(date);
-    const rowCls  = w.isHoliday ? "holidayRow" : w.isWeekend ? "weekendRow" : "";
-    const textCls = w.isHoliday ? "holidayText" : w.isWeekend ? "weekendText" : "";
+    // 使用真實的星期計算
+    const d = new Date(date);
+    const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
+    const realDay = dayNames[d.getDay()];
+    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+    
+    let holidayName = "";
+    for(const h of HOLIDAY_RANGES){
+      if(date>=h.start && date<=h.end){ holidayName=h.name; break; }
+    }
+    
+    const isHoliday = !!holidayName;
+    const rowCls  = isHoliday ? "holidayRow" : isWeekend ? "weekendRow" : "";
+    const textCls = isHoliday ? "holidayText" : isWeekend ? "weekendText" : "";
+    const label = isHoliday ? "國定假日" : ("週"+realDay);
 
     const time = r.created_at_tw.slice(11,19);
     const key  = r.name + "_" + date + "_" + r.action;
@@ -429,7 +446,7 @@ function drawTable(){
     html += `
     <tr class="${rowCls}">
       <td>${date}</td>
-      <td class="${textCls}" title="${w.holidayName||''}">${w.label}${w.holidayName?("｜"+w.holidayName):""}</td>
+      <td class="${textCls}" title="${holidayName||''}">${label}${holidayName?("｜"+holidayName):""}</td>
       <td>${r.name}</td>
       <td>${r.action}</td>
       <td>${r.action==="上班" ? time : ""}</td>
@@ -468,10 +485,22 @@ function drawTable(){
       const keyOut = l.name + "_" + cur + "_下班";
 
       if(!shown.has(keyIn) && !shown.has(keyOut)){
-        const w = weekdayInfo(cur);
+        // 使用真實的星期計算
+        const d = new Date(cur);
+        const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
+        const realDay = dayNames[d.getDay()];
+        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+        
+        let holidayName = "";
+        for(const h of HOLIDAY_RANGES){
+          if(cur>=h.start && cur<=h.end){ holidayName=h.name; break; }
+        }
+        
+        const isHoliday = !!holidayName;
         const baseCls = l.type==="出差" ? "tripRow" : l.type==="加班" ? "otRow" : "leaveOnly";
-        const rowCls  = w.isHoliday ? "holidayRow" : w.isWeekend ? "weekendRow" : baseCls;
-        const textCls = w.isHoliday ? "holidayText" : w.isWeekend ? "weekendText" : "";
+        const rowCls  = isHoliday ? "holidayRow" : isWeekend ? "weekendRow" : baseCls;
+        const textCls = isHoliday ? "holidayText" : isWeekend ? "weekendText" : "";
+        const label = isHoliday ? "國定假日" : ("週"+realDay);
 
         const statusText = (l.withdrawn===1) ? "已撤回" : (l.approved===1 ? "已核准" : "審核中");
 
@@ -488,7 +517,7 @@ function drawTable(){
         html += `
         <tr class="${rowCls}">
           <td>${cur}</td>
-          <td class="${textCls}" title="${w.holidayName||''}">${w.label}${w.holidayName?("｜"+w.holidayName):""}</td>
+          <td class="${textCls}" title="${holidayName||''}">${label}${holidayName?("｜"+holidayName):""}</td>
           <td>${l.name}</td>
           <td>申請</td>
           <td></td>
@@ -526,30 +555,6 @@ function drawTable(){
 }
 
 /* =====================
-   EXCEL HELPERS
-===================== */
-function isHoliday(dateStr){
-  for(const h of HOLIDAY_RANGES){
-    if(dateStr>=h.start && dateStr<=h.end) return true;
-  }
-  return false;
-}
-function isWeekend(dateStr){
-  const d = new Date(dateStr);
-  const day = d.getDay();
-  return day===0 || day===6;
-}
-function applyFill(cell, rgb){
-  cell.s = cell.s || {};
-  cell.s.fill = { fgColor:{ rgb } };
-}
-function applyFarStyle(cell){
-  cell.s = cell.s || {};
-  cell.s.fill = { fgColor:{ rgb:"C0392B" } };
-  cell.s.font = { color:{ rgb:"FFFFFF" }, bold:true };
-}
-
-/* =====================
    EXCEL EXPORT (FULL)
    - 每人一張 Sheet
    - 國定假日/週末底色
@@ -557,12 +562,13 @@ function applyFarStyle(cell){
    - 撤回不匯出
    - 狀態 + 主管註解
    - Daily Summary
+   - 日期交替顏色（白/灰交替）
 ===================== */
 function exportExcel(){
   const wb = XLSX.utils.book_new();
   const month = document.getElementById("monthPicker").value || "";
 
-  // 以 leaves / records 重建「和畫面一致」的資料（避免 innerText 解析出錯）
+  // 重建資料
   const rowsAll = [];
 
   // 1) 打卡列（含請假狀態/註解）
@@ -573,7 +579,7 @@ function exportExcel(){
 
     const leave = leaves.find(l => l.name===r.name && date>=l.start_date && date<=l.end_date);
 
-    // 撤回：整筆不進 Excel（你原本規則）
+    // 撤回：整筆不進 Excel
     if(leave && leave.withdrawn === 1) return;
 
     const w = weekdayInfo(date);
@@ -594,21 +600,25 @@ function exportExcel(){
       commentText = leave.comment || "";
     }
 
-    rowsAll.push([
-      date,
-      (w.isHoliday ? "國定假日" : w.label) + (w.holidayName ? "｜"+w.holidayName : ""),
-      r.name,
-      r.action,
-      r.action==="上班" ? time : "",
-      r.action==="下班" ? time : "",
-      gpsText,
-      distVal,
-      leave ? leave.type : "",
-      leave ? (leave.start_date+" ~ "+leave.end_date) : "",
-      leave ? String(leave.reason||"").replace(/\n/g," ") : "",
-      statusText,
-      commentText
-    ]);
+    rowsAll.push({
+      date: date,
+      sortTime: r.created_at_tw,
+      data: [
+        date,
+        (w.isHoliday ? "國定假日" : w.label) + (w.holidayName ? "｜"+w.holidayName : ""),
+        r.name,
+        r.action,
+        r.action==="上班" ? time : "",
+        r.action==="下班" ? time : "",
+        gpsText,
+        distVal,
+        leave ? leave.type : "",
+        leave ? (leave.start_date+" ~ "+leave.end_date) : "",
+        leave ? String(leave.reason||"").replace(/\n/g," ") : "",
+        statusText,
+        commentText
+      ]
+    });
   });
 
   // 2) 只有申請（沒打卡）
@@ -641,21 +651,25 @@ function exportExcel(){
       if(!shownPunch.has(keyIn) && !shownPunch.has(keyOut)){
         const w = weekdayInfo(cur);
 
-        rowsAll.push([
-          cur,
-          (w.isHoliday ? "國定假日" : w.label) + (w.holidayName ? "｜"+w.holidayName : ""),
-          l.name,
-          "申請",
-          "",
-          "",
-          "",
-          "",
-          l.type,
-          l.start_date+" ~ "+l.end_date,
-          String(l.reason||"").replace(/\n/g," "),
-          (l.approved===1 ? "已核准" : "審核中"),
-          (l.comment || "")
-        ]);
+        rowsAll.push({
+          date: cur,
+          sortTime: cur + "T23:59:59", // 申請放在當天最後
+          data: [
+            cur,
+            (w.isHoliday ? "國定假日" : w.label) + (w.holidayName ? "｜"+w.holidayName : ""),
+            l.name,
+            "申請",
+            "",
+            "",
+            "",
+            "",
+            l.type,
+            l.start_date+" ~ "+l.end_date,
+            String(l.reason||"").replace(/\n/g," "),
+            (l.approved===1 ? "已核准" : "審核中"),
+            (l.comment || "")
+          ]
+        });
         break;
       }
 
@@ -663,49 +677,92 @@ function exportExcel(){
     }
   });
 
+  // 排序：最新在上
+  rowsAll.sort((a, b) => b.sortTime.localeCompare(a.sortTime));
+
   // 依姓名分組
   const people = {};
-  rowsAll.forEach(r=>{
-    const name = r[2] || "未命名";
+  rowsAll.forEach(row=>{
+    const name = row.data[2] || "未命名";
     if(!people[name]) people[name] = [];
-    people[name].push(r);
+    people[name].push(row);
   });
 
   // 每人 Sheet
   const header = ["日期","星期","姓名","類型","上班","下班","GPS","距公司(m)","申請類型","期間","詳細","狀態","主管註解"];
 
   Object.keys(people).forEach(name=>{
-    const aoa = [header, ...people[name]];
+    const rowsForPerson = people[name];
+    const aoa = [header, ...rowsForPerson.map(r => r.data)];
     const ws = XLSX.utils.aoa_to_sheet(aoa);
+    
+    // 設定欄寬
     ws["!cols"] = [
       {wch:12},{wch:18},{wch:10},{wch:6},
       {wch:10},{wch:10},{wch:22},{wch:12},
       {wch:10},{wch:22},{wch:34},{wch:8},{wch:24}
     ];
 
-    for(let i=2;i<=aoa.length;i++){
-      const dateStr = String(ws["A"+i]?.v || "");
-      const holiday = isHoliday(dateStr);
-      const weekend = isWeekend(dateStr);
+    // 取得所有日期（從新到舊）
+    const allDates = rowsForPerson.map(r => r.date);
+    const uniqueDates = [...new Set(allDates)].sort((a, b) => b.localeCompare(a));
+    
+    // 建立日期到顏色的映射（白/灰交替）
+    const dateColorMap = new Map();
+    uniqueDates.forEach((date, index) => {
+      dateColorMap.set(date, index % 2 === 0 ? "FFFFFF" : "F5F5F5");
+    });
 
-      if(holiday || weekend){
-        const rgb = holiday ? "FFF4CC" : "FFECEC";
-        ["A","B","C","D","E","F","G","H","I","J","K","L","M"].forEach(c=>{
-          const cell = ws[c+i];
-          if(cell) applyFill(cell, rgb);
-        });
+    // 套用樣式到每一行
+    for(let i = 2; i <= aoa.length; i++){
+      const dateStr = aoa[i-1][0];
+      if(!dateStr) continue;
+      
+      // 決定底色
+      let backgroundColor = dateColorMap.get(dateStr) || "FFFFFF";
+      
+      // 檢查特殊日期
+      const d = new Date(dateStr);
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      const holiday = HOLIDAY_RANGES.some(h => dateStr >= h.start && dateStr <= h.end);
+      
+      if(holiday){
+        backgroundColor = "FFF4CC"; // 國定假日黃色
+      }else if(isWeekend){
+        backgroundColor = "FFECEC"; // 週末淺紅色
       }
 
-      const distCell = ws["H"+i];
-      if(distCell && Number(distCell.v)>35) applyFarStyle(distCell);
+      // 套用底色到整行的每個儲存格
+      const columns = ["A","B","C","D","E","F","G","H","I","J","K","L","M"];
+      columns.forEach(col => {
+        const cellRef = col + i;
+        const cell = ws[cellRef];
+        if(!cell) return;
+        
+        // 確保有樣式物件
+        if(!cell.s) cell.s = {};
+        if(!cell.s.fill) cell.s.fill = {};
+        if(!cell.s.fill.fgColor) cell.s.fill.fgColor = {};
+        
+        // 距離欄位特殊處理
+        if(col === "H" && Number(cell.v) > 35){
+          cell.s.fill.fgColor.rgb = "C0392B";
+          if(!cell.s.font) cell.s.font = {};
+          cell.s.font.color = { rgb: "FFFFFF" };
+          cell.s.font.bold = true;
+        } else {
+          cell.s.fill.fgColor.rgb = backgroundColor;
+        }
+      });
     }
 
-    XLSX.utils.book_append_sheet(wb, ws, String(name).substring(0,31));
+    XLSX.utils.book_append_sheet(wb, ws, name.substring(0,31));
   });
 
   // Daily Summary
   const summary = {};
-  rowsAll.forEach(r=>{
+  rowsAll.forEach(row=>{
+    const r = row.data;
     const date = r[0];
     const name = r[2];
     const type = r[3];
@@ -725,27 +782,73 @@ function exportExcel(){
     summary[key].maxDist = Math.max(summary[key].maxDist, dist);
   });
 
+  // 將 summary 轉為陣列並排序（最新在上）
+  const summaryArray = Object.values(summary);
+  summaryArray.sort((a, b) => b.date.localeCompare(a.date));
+
   const sumAoa = [["日期","姓名","最早上班","最晚下班","最遠距離(m)"]];
-  Object.values(summary).forEach(v=>{
+  summaryArray.forEach(v=>{
     sumAoa.push([v.date, v.name, v.earliest, v.latest, v.maxDist]);
   });
 
   const wsSum = XLSX.utils.aoa_to_sheet(sumAoa);
   wsSum["!cols"] = [{wch:12},{wch:10},{wch:10},{wch:10},{wch:14}];
 
-  for(let i=2;i<=sumAoa.length;i++){
-    const dateStr = String(wsSum["A"+i]?.v || "");
-    const holiday = isHoliday(dateStr);
-    const weekend = isWeekend(dateStr);
-    if(holiday || weekend){
-      const rgb = holiday ? "FFF4CC" : "FFECEC";
-      ["A","B","C","D","E"].forEach(c=>{
-        const cell = wsSum[c+i];
-        if(cell) applyFill(cell, rgb);
-      });
+  // Daily Summary 也套用日期交替色
+  const summaryDates = [...new Set(sumAoa.slice(1).map(row => row[0]).filter(Boolean))];
+  summaryDates.sort((a, b) => b.localeCompare(a));
+  
+  const summaryDateColorMap = new Map();
+  summaryDates.forEach((date, index) => {
+    summaryDateColorMap.set(date, index % 2 === 0 ? "FFFFFF" : "F5F5F5");
+  });
+
+  // 套用樣式到 Summary
+  for(let i = 2; i <= sumAoa.length; i++){
+    const dateStr = sumAoa[i-1][0];
+    if(!dateStr) continue;
+    
+    let backgroundColor = summaryDateColorMap.get(dateStr) || "FFFFFF";
+    
+    // 檢查特殊日期
+    const d = new Date(dateStr);
+    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+    const holiday = HOLIDAY_RANGES.some(h => dateStr >= h.start && dateStr <= h.end);
+    
+    if(holiday){
+      backgroundColor = "FFF4CC";
+    }else if(isWeekend){
+      backgroundColor = "FFECEC";
     }
-    const cellE = wsSum["E"+i];
-    if(cellE && Number(cellE.v)>35) applyFarStyle(cellE);
+
+    // 套用底色
+    ["A","B","C","D"].forEach(col => {
+      const cellRef = col + i;
+      const cell = wsSum[cellRef];
+      if(!cell) return;
+      
+      if(!cell.s) cell.s = {};
+      if(!cell.s.fill) cell.s.fill = {};
+      if(!cell.s.fill.fgColor) cell.s.fill.fgColor = {};
+      cell.s.fill.fgColor.rgb = backgroundColor;
+    });
+
+    // 距離欄位特殊處理
+    const distCell = wsSum["E"+i];
+    if(distCell && Number(distCell.v) > 35){
+      if(!distCell.s) distCell.s = {};
+      if(!distCell.s.fill) distCell.s.fill = {};
+      if(!distCell.s.fill.fgColor) distCell.s.fill.fgColor = {};
+      distCell.s.fill.fgColor.rgb = "C0392B";
+      if(!distCell.s.font) distCell.s.font = {};
+      distCell.s.font.color = { rgb: "FFFFFF" };
+      distCell.s.font.bold = true;
+    }else if(distCell){
+      if(!distCell.s) distCell.s = {};
+      if(!distCell.s.fill) distCell.s.fill = {};
+      if(!distCell.s.fill.fgColor) distCell.s.fill.fgColor = {};
+      distCell.s.fill.fgColor.rgb = backgroundColor;
+    }
   }
 
   XLSX.utils.book_append_sheet(wb, wsSum, "Daily Summary");
