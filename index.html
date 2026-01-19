@@ -192,7 +192,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
 /* ===== API ===== */
 const API_PUNCH = "https://punch-api.jackey1688.workers.dev/api/punch";
 const API_REC = "https://punch-api.jackey1688.workers.dev/api/records";
-const API_LEAVE = "https://punch-api.jackey1688.workers.dev/api/leave"; // 新增請假/出差API
+const API_LEAVE = "https://punch-api.jackey1688.workers.dev/api/leave";
 
 /* ===== 公司座標 ===== */
 const COMPANY_LAT = 25.00657;
@@ -224,6 +224,41 @@ const statusBox = document.getElementById("statusBox");
 const btnIn = document.getElementById("btnIn");
 const btnOut = document.getElementById("btnOut");
 
+/* ===== 台灣時間工具函數 ===== */
+function getTaiwanDate() {
+  // 取得當前 UTC 時間
+  const now = new Date();
+  // 台灣時區是 UTC+8
+  const taiwanTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
+  return taiwanTime;
+}
+
+function formatTaiwanDate(date) {
+  // 格式：YYYY-MM-DD
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatTaiwanDateTime(date) {
+  // 格式：YYYY-MM-DD HH:MM:SS
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+
+/* ===== 今日 ===== */
+const now = getTaiwanDate();
+const today = formatTaiwanDate(now);
+const map = ["日", "一", "二", "三", "四", "五", "六"];
+document.getElementById("todayDate").innerText = today;
+document.getElementById("todayWeek").innerText = "週" + map[now.getDay()];
+
 /* ===== 姓名 ===== */
 let name = localStorage.getItem("name");
 if (!name) {
@@ -241,13 +276,6 @@ function editName() {
   log(`👤 已切換使用者：${name}`);
   loadStatus(); // 切換人員後刷新狀態
 }
-
-/* ===== 今日 ===== */
-const now = new Date();
-const today = now.toISOString().slice(0, 10);
-const map = ["日", "一", "二", "三", "四", "五", "六"];
-document.getElementById("todayDate").innerText = today;
-document.getElementById("todayWeek").innerText = "週" + map[now.getDay()];
 
 /* ===== 工具 ===== */
 function log(t) {
@@ -287,16 +315,20 @@ async function getBusinessInfo() {
       throw new Error(`API 錯誤: ${response.status}`);
     }
     const list = await response.json();
-    console.log('出差/會議資料:', list); // 除錯用
     
-    const todayDate = new Date(today);
-    const yesterdayDate = new Date(todayDate);
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterday = yesterdayDate.toISOString().slice(0, 10);
+    // 使用台灣時間計算昨天和明天
+    const taiwanToday = getTaiwanDate();
+    const taiwanDateStr = formatTaiwanDate(taiwanToday);
     
-    const tomorrowDate = new Date(todayDate);
-    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-    const tomorrow = tomorrowDate.toISOString().slice(0, 10);
+    // 計算昨天
+    const taiwanYesterday = new Date(taiwanToday);
+    taiwanYesterday.setDate(taiwanYesterday.getDate() - 1);
+    const yesterdayStr = formatTaiwanDate(taiwanYesterday);
+    
+    // 計算明天
+    const taiwanTomorrow = new Date(taiwanToday);
+    taiwanTomorrow.setDate(taiwanTomorrow.getDate() + 1);
+    const tomorrowStr = formatTaiwanDate(taiwanTomorrow);
     
     let todayBiz = null;
     let yesterdayBiz = null;
@@ -309,33 +341,27 @@ async function getBusinessInfo() {
       (item.type === "出差" || item.type === "會議")
     );
     
-    console.log('使用者出差/會議:', userBiz); // 除錯用
-    
     userBiz.forEach(item => {
       const startDate = item.start_date;
       const endDate = item.end_date;
       
       // 檢查今天是否在區間內
-      if (today >= startDate && today <= endDate) {
+      if (taiwanDateStr >= startDate && taiwanDateStr <= endDate) {
         todayBiz = item;
       }
       
       // 檢查昨天是否在區間內
-      if (yesterday >= startDate && yesterday <= endDate) {
+      if (yesterdayStr >= startDate && yesterdayStr <= endDate) {
         yesterdayBiz = item;
       }
       
-      // 檢查明天是否在區間內（新增）
-      if (tomorrow >= startDate && tomorrow <= endDate) {
+      // 檢查明天是否在區間內
+      if (tomorrowStr >= startDate && tomorrowStr <= endDate) {
         tomorrowBiz = item;
       }
     });
     
-    console.log('今天出差:', todayBiz); // 除錯用
-    console.log('昨天出差:', yesterdayBiz); // 除錯用
-    console.log('明天出差:', tomorrowBiz); // 除錯用
-    
-    return { todayBiz, yesterdayBiz, tomorrowBiz }; // 新增 tomorrowBiz
+    return { todayBiz, yesterdayBiz, tomorrowBiz };
   } catch (error) {
     console.error("取得出差/會議資訊失敗:", error);
     log(`❌ 取得出差/會議資訊失敗: ${error.message}`);
@@ -355,42 +381,92 @@ async function loadStatus() {
     todayOutCount = 0;
     let inTime = "", outTime = "";
 
+    // 使用台灣時間判斷今日紀錄
     data.forEach(r => {
-      if (r.name === name && r.created_at_tw?.startsWith(today)) {
-        if (r.action === "上班") { todayInCount++; inTime = r.created_at_tw.slice(11, 19); }
-        if (r.action === "下班") { todayOutCount++; outTime = r.created_at_tw.slice(11, 19); }
+      // 確保紀錄有時間資料
+      if (!r.created_at_tw) return;
+      
+      // 解析紀錄時間
+      const recordDateStr = r.created_at_tw.split(' ')[0];
+      
+      if (r.name === name && recordDateStr === today) {
+        const recordTime = r.created_at_tw.split(' ')[1];
+        
+        if (r.action === "上班") { 
+          todayInCount++; 
+          inTime = recordTime; 
+        }
+        if (r.action === "下班") { 
+          todayOutCount++; 
+          outTime = recordTime; 
+        }
       }
     });
 
-    // 取得出差/會議資訊（包含明天的）
+    // 取得出差/會議資訊
     const { todayBiz, yesterdayBiz, tomorrowBiz } = await getBusinessInfo();
     
     // 建立狀態顯示HTML
     let statusHTML = "";
     
-    // 先檢查是否為假日
+    // 檢查今天是否為假日
     let holiday = "";
     for (const h of HOLIDAYS) {
-      if (today >= h.start && today <= h.end) { holiday = h.name; break; }
+      if (today >= h.start && today <= h.end) { 
+        holiday = h.name; 
+        break; 
+      }
     }
     
+    // 計算明天日期
+    const taiwanTomorrow = new Date(now);
+    taiwanTomorrow.setDate(taiwanTomorrow.getDate() + 1);
+    const tomorrowStr = formatTaiwanDate(taiwanTomorrow);
+    
+    // 檢查明天是否是假日
+    let tomorrowHoliday = "";
+    for (const h of HOLIDAYS) {
+      if (tomorrowStr >= h.start && tomorrowStr <= h.end) { 
+        tomorrowHoliday = h.name; 
+        break; 
+      }
+    }
+    
+    // 假日顯示邏輯
     if (holiday) {
-      statusHTML += `<div class="reminder-today">🎌 今日為 ${holiday}，免打卡</div>`;
+      statusHTML += `<div class="reminder-today">
+        🎌 今日為 <strong>${holiday}</strong>，免打卡
+      </div>`;
       btnIn.disabled = true;
       btnOut.disabled = true;
+      
+      // 即使在假日，也顯示今天的出差/會議資訊
+      if (todayBiz) {
+        statusHTML += `<div class="reminder-today">
+          📌 今日另有 <strong>${todayBiz.type}</strong> 行程<br>
+          📅 期間：${todayBiz.start_date} ～ ${todayBiz.end_date}
+        </div>`;
+      }
     } else if (now.getDay() === 0 || now.getDay() === 6) {
       statusHTML += `<div class="reminder-today">🔴 今日為週末，免打卡</div>`;
       btnIn.disabled = true;
       btnOut.disabled = true;
+      
+      // 週末也顯示今天的出差/會議資訊
+      if (todayBiz) {
+        statusHTML += `<div class="reminder-today">
+          📌 今日另有 <strong>${todayBiz.type}</strong> 行程<br>
+          📅 期間：${todayBiz.start_date} ～ ${todayBiz.end_date}
+        </div>`;
+      }
     } else {
-      // 檢查今天是否有出差/會議
+      // 正常工作日
       if (todayBiz) {
         statusHTML += `<div class="reminder-today">
           📌 今日為 <strong>${todayBiz.type}</strong><br>
           📅 期間：${todayBiz.start_date} ～ ${todayBiz.end_date}<br>
           💡 <strong>今日免打卡</strong>
         </div>`;
-        // 禁用打卡按鈕
         btnIn.disabled = true;
         btnOut.disabled = true;
       } else {
@@ -398,47 +474,57 @@ async function loadStatus() {
         btnIn.disabled = todayInCount >= MAX_PUNCH_PER_DAY;
         btnOut.disabled = todayInCount === 0 || todayOutCount >= MAX_PUNCH_PER_DAY;
       }
-      
-      // 檢查昨天是否有出差/會議（且今天沒有）
-      if (yesterdayBiz && !todayBiz) {
-        statusHTML += `<div class="reminder-yesterday">
-          📌 昨日為 <strong>${yesterdayBiz.type}</strong><br>
-          📅 期間：${yesterdayBiz.start_date} ～ ${yesterdayBiz.end_date}
+    }
+    
+    // 顯示明天出差/會議提醒（無論今天是否為假日）
+    if (tomorrowBiz) {
+      statusHTML += `<div class="reminder-tomorrow">
+        🔔 明日為 <strong>${tomorrowBiz.type}</strong><br>
+        📅 期間：${tomorrowBiz.start_date} ～ ${tomorrowBiz.end_date}<br>
+        💡 明日免打卡，請提前準備
+      </div>`;
+    }
+    
+    // 顯示明天假日提醒
+    if (tomorrowHoliday) {
+      statusHTML += `<div class="reminder-tomorrow">
+        🎌 明日為 <strong>${tomorrowHoliday}</strong><br>
+        💡 明日免打卡
+      </div>`;
+    }
+    
+    // 顯示昨天出差/會議資訊
+    if (yesterdayBiz) {
+      statusHTML += `<div class="reminder-yesterday">
+        📌 昨日為 <strong>${yesterdayBiz.type}</strong><br>
+        📅 期間：${yesterdayBiz.start_date} ～ ${yesterdayBiz.end_date}
+      </div>`;
+    }
+    
+    // 檢查是否遲到提醒
+    if (!holiday && now.getDay() !== 0 && now.getDay() !== 6 && !todayBiz) {
+      const hhmm = now.getHours() * 100 + now.getMinutes();
+      if (hhmm >= 910 && todayInCount === 0) {
+        statusHTML += `<div style="color:#dc2626;margin:8px 0">
+          🔴 您尚未打卡，請速打卡
         </div>`;
-      }
-      
-      // 檢查明天是否有出差/會議（新增提醒）
-      if (tomorrowBiz && !todayBiz) {
-        statusHTML += `<div class="reminder-tomorrow">
-          🔔 明日為 <strong>${tomorrowBiz.type}</strong><br>
-          📅 期間：${tomorrowBiz.start_date} ～ ${tomorrowBiz.end_date}<br>
-          💡 明日免打卡，請提前準備
-        </div>`;
-      }
-      
-      // 檢查是否遲到提醒（只有在沒有出差/會議的情況下才提醒）
-      if (!todayBiz) {
-        const hhmm = now.getHours() * 100 + now.getMinutes();
-        if (hhmm >= 910 && todayInCount === 0) {
-          statusHTML += `<div style="color:#dc2626;margin:8px 0">
-            🔴 您尚未打卡，請速打卡
-          </div>`;
-        }
       }
     }
     
-    // 顯示打卡狀態（如果沒有出差/會議）
-    statusHTML += `
-      <div style="margin-top:10px">
-        🟢 上班：${todayInCount ? inTime : "尚未"}（${todayInCount}/2）<br>
-        🔵 下班：${todayOutCount ? outTime : "—"}（${todayOutCount}/2）
-      </div>
-    `;
+    // 顯示打卡狀態
+    if (!holiday && now.getDay() !== 0 && now.getDay() !== 6 && !todayBiz) {
+      statusHTML += `
+        <div style="margin-top:10px">
+          🟢 上班：${todayInCount ? inTime : "尚未"}（${todayInCount}/2）<br>
+          🔵 下班：${todayOutCount ? outTime : "—"}（${todayOutCount}/2）
+        </div>
+      `;
+    }
     
     statusBox.innerHTML = statusHTML;
     
     // 套用冷卻規則
-    if (isInCooldown() && !todayBiz && !holiday) {
+    if (isInCooldown() && !holiday && now.getDay() !== 0 && now.getDay() !== 6 && !todayBiz) {
       const sec = cooldownRemainSec();
       btnIn.disabled = true;
       btnOut.disabled = true;
@@ -490,18 +576,16 @@ function punch(action) {
     log(`✅ ${action} 成功｜距公司 ${dist} m`);
     loadStatus();
 
-    // 額外：每秒刷新冷卻倒數顯示（到 0 自動停）
+    // 冷卻倒數顯示
     const timer = setInterval(() => {
       if (!isInCooldown()) {
         clearInterval(timer);
         loadStatus();
         return;
       }
-      // 不重拉 API，只更新顯示（避免浪費流量）
       const sec = cooldownRemainSec();
       btnIn.disabled = true;
       btnOut.disabled = true;
-      // 保留原本狀態文字 + 倒數
       const base = statusBox.innerHTML.split("<br>⏳")[0];
       statusBox.innerHTML = base + `<br>⏳ 打卡冷卻中，剩餘 ${sec} 秒`;
     }, 1000);
@@ -547,30 +631,38 @@ async function loadMonthly() {
   try {
     const data = await (await fetch(API_REC)).json();
 
-    const ym = today.slice(0, 7); // YYYY-MM
-    const records = data.filter(r =>
-      r.name === name &&
-      r.created_at_tw?.startsWith(ym)
-    );
+    // 使用台灣時間取得當前年月
+    const taiwanNow = getTaiwanDate();
+    const currentYear = taiwanNow.getFullYear();
+    const currentMonth = String(taiwanNow.getMonth() + 1).padStart(2, '0');
+    const currentYM = `${currentYear}-${currentMonth}`;
+
+    const records = data.filter(r => {
+      if (!r.created_at_tw || r.name !== name) return false;
+      
+      const recordDateStr = r.created_at_tw.split(' ')[0];
+      return recordDateStr.startsWith(currentYM);
+    });
 
     // 依日期分組
     const byDate = {};
     records.forEach(r => {
-      const d = r.created_at_tw.slice(0, 10);
-      if (!byDate[d]) byDate[d] = [];
-      byDate[d].push(r);
+      const recordDateStr = r.created_at_tw.split(' ')[0];
+      if (!byDate[recordDateStr]) byDate[recordDateStr] = [];
+      byDate[recordDateStr].push(r);
     });
 
-    let html = `📆 ${ym} 每日打卡紀錄<br>====================<br>`;
+    let html = `📆 ${currentYM} 每日打卡紀錄<br>====================<br>`;
 
     Object.keys(byDate).sort().forEach(date => {
-      const dObj = new Date(date);
+      const dObj = new Date(date + 'T00:00:00+08:00');
       const week = map[dObj.getDay()];
 
       html += `<br>📅 ${date}（週${week}）<br>`;
 
       byDate[date].forEach(r => {
-        html += `　🕒 ${r.created_at_tw.slice(11, 19)}｜${r.action}<br>`;
+        const timePart = r.created_at_tw.split(' ')[1] || "";
+        html += `　🕒 ${timePart}｜${r.action}<br>`;
       });
     });
 
@@ -583,8 +675,6 @@ async function loadMonthly() {
     box.innerHTML = "❌ 讀取紀錄失敗，請檢查網路連線";
   }
 }
-
 </script>
-
 </body>
 </html>
