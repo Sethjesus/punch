@@ -389,6 +389,110 @@ button:disabled{opacity:.4;cursor:not-allowed}
   50% { opacity: 0.7; }
   100% { opacity: 1; }
 }
+
+/* ===== 新增：主管註解樣式 ===== */
+.comment-section {
+  margin: 16px 0 8px 0;
+  padding: 12px;
+  background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+  border-radius: 12px;
+  border: 1px solid #bae6fd;
+  border-left: 4px solid #0284c7;
+}
+
+.comment-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #0c4a6e;
+}
+
+.comment-content {
+  background: rgba(255, 255, 255, 0.95);
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #1e293b;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid #e2e8f0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.comment-empty {
+  color: #64748b;
+  font-style: italic;
+  text-align: center;
+  padding: 20px;
+  background: #f8fafc;
+  border-radius: 6px;
+}
+
+.comment-date {
+  font-size: 11px;
+  color: #64748b;
+  text-align: right;
+  margin-top: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.comment-badge {
+  background: #0284c7;
+  color: white;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.comment-loading {
+  text-align: center;
+  padding: 20px;
+  color: #64748b;
+}
+
+.comment-error {
+  background: #fee2e2;
+  color: #dc2626;
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: center;
+  border: 1px solid #fecaca;
+}
+
+.comment-view-all {
+  background: #0284c7;
+  color: white;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.comment-view-all:hover {
+  background: #0369a1;
+}
+
+.comment-recent-item {
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.comment-recent-item:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
 </style>
 </head>
 
@@ -419,6 +523,9 @@ button:disabled{opacity:.4;cursor:not-allowed}
   <!-- 狀態 -->
   <div class="status" id="statusBox">讀取今日狀態中…</div>
 
+  <!-- 主管註解區域（動態載入） -->
+  <div id="commentSection"></div>
+
   <!-- 打卡 -->
   <div class="actions">
     <button id="btnIn" class="btn-in" onclick="punch('上班')">上班打卡</button>
@@ -443,14 +550,15 @@ button:disabled{opacity:.4;cursor:not-allowed}
 const API_PUNCH = "https://punch-api.jackey1688.workers.dev/api/punch";
 const API_REC = "https://punch-api.jackey1688.workers.dev/api/records";
 const API_LEAVE = "https://punch-api.jackey1688.workers.dev/api/leave";
+const API_COMMENT = "https://punch-api.jackey1688.workers.dev/api/leave/comment";
 
 /* ===== 公司座標 ===== */
 const COMPANY_LAT = 25.00657;
 const COMPANY_LNG = 121.48416;
 
 /* ===== 距離分類 ===== */
-const DISTANCE_THRESHOLD_NEAR = 100; // 100公尺內為近距離（綠色）
-const DISTANCE_THRESHOLD_MEDIUM = 500; // 500公尺內為中距離（黃色）
+const DISTANCE_THRESHOLD_NEAR = 35; // 35公尺內為近距離（綠色）
+const DISTANCE_THRESHOLD_MEDIUM = 100; // 100公尺內為中距離（黃色）
 
 /* ===== 打卡限制設定 ===== */
 const MAX_PUNCH_PER_ACTION = 2; // 上下班各只能打2次
@@ -476,30 +584,15 @@ const statusBox = document.getElementById("statusBox");
 const btnIn = document.getElementById("btnIn");
 const btnOut = document.getElementById("btnOut");
 const currentTimeDisplay = document.getElementById("currentTime");
+const commentSection = document.getElementById("commentSection");
 
 /* ===== 台灣時間工具函數 ===== */
 function getTaiwanDate() {
-  // 直接使用本地時間（假設使用者電腦時區已設定為台灣時區）
   const now = new Date();
-  
-  // 輸出偵錯資訊
-  const utcStr = now.toUTCString();
-  const localStr = now.toString();
-  const tzOffset = now.getTimezoneOffset();
-  
-  console.log('時間偵錯:', {
-    UTC: utcStr,
-    Local: localStr,
-    TimezoneOffset: tzOffset,
-    TaiwanExpected: `UTC+8 (${-480}分鐘)`,
-    CurrentOffset: `${tzOffset}分鐘 (UTC${tzOffset > 0 ? '-' : '+'}${Math.abs(tzOffset)/60})`
-  });
-  
   return now;
 }
 
 function formatTaiwanDate(date) {
-  // 格式：YYYY-MM-DD
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
@@ -507,7 +600,6 @@ function formatTaiwanDate(date) {
 }
 
 function formatTaiwanDateTime(date) {
-  // 格式：YYYY-MM-DD HH:MM:SS
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
@@ -518,7 +610,6 @@ function formatTaiwanDateTime(date) {
 }
 
 function formatTimeOnly(date) {
-  // 格式：HH:MM:SS
   const hours = String(date.getHours()).padStart(2, '0');
   const minutes = String(date.getMinutes()).padStart(2, '0');
   const seconds = String(date.getSeconds()).padStart(2, '0');
@@ -567,7 +658,8 @@ function editName() {
   localStorage.setItem("name", name);
   document.getElementById("userName").innerText = name;
   log(`👤 ${formatTimeOnly(getTaiwanDate())} 已切換使用者：${name}`);
-  loadStatus(); // 切換人員後刷新狀態
+  loadStatus();
+  loadComments();
 }
 
 /* ===== 工具 ===== */
@@ -641,16 +733,13 @@ async function getBusinessInfo() {
     }
     const list = await response.json();
     
-    // 使用台灣時間計算昨天和明天
     const taiwanToday = getTaiwanDate();
     const taiwanDateStr = formatTaiwanDate(taiwanToday);
     
-    // 計算昨天
     const taiwanYesterday = new Date(taiwanToday);
     taiwanYesterday.setDate(taiwanYesterday.getDate() - 1);
     const yesterdayStr = formatTaiwanDate(taiwanYesterday);
     
-    // 計算明天
     const taiwanTomorrow = new Date(taiwanToday);
     taiwanTomorrow.setDate(taiwanTomorrow.getDate() + 1);
     const tomorrowStr = formatTaiwanDate(taiwanTomorrow);
@@ -659,7 +748,6 @@ async function getBusinessInfo() {
     let yesterdayBiz = null;
     let tomorrowBiz = null;
     
-    // 過濾出當前使用者的已核准出差/會議
     const userBiz = list.filter(item => 
       item.name === name && 
       item.approved === 1 && 
@@ -670,17 +758,14 @@ async function getBusinessInfo() {
       const startDate = item.start_date;
       const endDate = item.end_date;
       
-      // 檢查今天是否在區間內
       if (taiwanDateStr >= startDate && taiwanDateStr <= endDate) {
         todayBiz = item;
       }
       
-      // 檢查昨天是否在區間內
       if (yesterdayStr >= startDate && yesterdayStr <= endDate) {
         yesterdayBiz = item;
       }
       
-      // 檢查明天是否在區間內
       if (tomorrowStr >= startDate && tomorrowStr <= endDate) {
         tomorrowBiz = item;
       }
@@ -708,10 +793,8 @@ function createBusinessDetailsHTML(biz, isToday = true) {
       ${typeEmoji} ${timePrefix}為 <strong>${biz.type}</strong> 期間
     </div>`;
   
-  // 顯示詳細資訊
   html += `<div class="${detailsClass}">`;
   
-  // 會議/出差基本資訊
   if (biz.reason) {
     html += `<div class="detail-item">
       <span class="detail-label">事由：</span>
@@ -726,13 +809,11 @@ function createBusinessDetailsHTML(biz, isToday = true) {
     </div>`;
   }
   
-  // 日期期間
   html += `<div class="detail-item">
     <span class="detail-label">期間：</span>
     <span class="detail-value">${biz.start_date} ～ ${biz.end_date}</span>
   </div>`;
   
-  // 顯示其他可能有的欄位
   const fields = [
     { key: 'description', label: '說明' },
     { key: 'notes', label: '備註' },
@@ -749,7 +830,6 @@ function createBusinessDetailsHTML(biz, isToday = true) {
     }
   });
   
-  // 如果是今天，顯示打卡提示
   if (isToday) {
     html += `<div class="detail-item" style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed #cbd5e1;">
       <span class="detail-label">打卡：</span>
@@ -764,6 +844,259 @@ function createBusinessDetailsHTML(biz, isToday = true) {
   return html;
 }
 
+/* ===== 載入主管註解（修正版）===== */
+async function loadComments() {
+  try {
+    const today = formatTaiwanDate(getTaiwanDate());
+    
+    commentSection.innerHTML = `
+      <div class="comment-loading">
+        <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px;">
+          <div style="width:16px;height:16px;border:2px solid #64748b;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;"></div>
+          <span>載入主管註解中...</span>
+        </div>
+      </div>
+    `;
+    
+    const leaveResponse = await fetch(API_LEAVE);
+    let allLeaves = [];
+    
+    try {
+      allLeaves = await leaveResponse.json();
+      console.log('取得的請假資料:', allLeaves);
+    } catch (parseError) {
+      console.error('解析請假資料失敗:', parseError);
+      throw new Error('請假資料格式錯誤');
+    }
+    
+    if (!Array.isArray(allLeaves)) {
+      console.error('請假資料不是陣列:', allLeaves);
+      allLeaves = [];
+    }
+    
+    const userLeaves = allLeaves.filter(leave => leave.name === name);
+    console.log(`使用者 ${name} 的請假記錄:`, userLeaves);
+    
+    const todayLeaves = allLeaves.filter(leave => {
+      if (!leave.name || leave.name !== name) return false;
+      if (!leave.start_date || !leave.end_date) return false;
+      
+      const startDate = leave.start_date;
+      const endDate = leave.end_date;
+      
+      const isTodayInRange = today >= startDate && today <= endDate;
+      const hasComment = leave.comment && leave.comment.trim() !== '';
+      
+      console.log(`檢查申請:`, {
+        name: leave.name,
+        type: leave.type,
+        start: startDate,
+        end: endDate,
+        today: today,
+        inRange: isTodayInRange,
+        hasComment: hasComment,
+        comment: leave.comment,
+        approved: leave.approved
+      });
+      
+      return isTodayInRange && hasComment;
+    });
+    
+    console.log(`今天相關且有註解的申請:`, todayLeaves);
+    
+    let commentHTML = '';
+    
+    if (todayLeaves.length > 0) {
+      todayLeaves.forEach((leave, index) => {
+        let dateStr = today;
+        let timeStr = '';
+        
+        if (leave.updated_at_tw) {
+          const parts = leave.updated_at_tw.split(' ');
+          if (parts.length >= 1) dateStr = parts[0];
+          if (parts.length >= 2) timeStr = parts[1].substring(0, 5);
+        } else if (leave.created_at_tw) {
+          const parts = leave.created_at_tw.split(' ');
+          if (parts.length >= 1) dateStr = parts[0];
+          if (parts.length >= 2) timeStr = parts[1].substring(0, 5);
+        }
+        
+        let statusBadge = '';
+        if (leave.withdrawn === 1) {
+          statusBadge = '<span style="background:#9ca3af;margin-left:6px;" class="comment-badge">已撤回</span>';
+        } else if (leave.approved === 1) {
+          statusBadge = '<span style="background:#059669;margin-left:6px;" class="comment-badge">已核准</span>';
+        } else {
+          statusBadge = '<span style="background:#d97706;margin-left:6px;" class="comment-badge">審核中</span>';
+        }
+        
+        commentHTML += `
+          <div class="comment-section">
+            <div class="comment-header">
+              <span>💬 主管註解</span>
+              <span class="comment-badge">${leave.type || '申請'}</span>
+              ${statusBadge}
+            </div>
+            <div class="comment-content">
+              ${leave.comment.replace(/\n/g, '<br>')}
+            </div>
+            <div class="comment-date">
+              <span>期間：${leave.start_date} ~ ${leave.end_date}</span>
+              <span>${dateStr} ${timeStr}</span>
+            </div>
+          </div>
+        `;
+      });
+    } else {
+      const sevenDaysAgo = new Date(getTaiwanDate());
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const sevenDaysAgoStr = formatTaiwanDate(sevenDaysAgo);
+      
+      const recentComments = allLeaves.filter(leave => {
+        if (!leave.name || leave.name !== name) return false;
+        if (!leave.comment || leave.comment.trim() === '') return false;
+        
+        const checkDate = leave.updated_at_tw || leave.created_at_tw;
+        if (!checkDate) return false;
+        
+        const datePart = checkDate.split(' ')[0];
+        return datePart >= sevenDaysAgoStr;
+      });
+      
+      console.log(`最近7天內的註解:`, recentComments);
+      
+      if (recentComments.length > 0) {
+        recentComments.sort((a, b) => {
+          const dateA = a.updated_at_tw || a.created_at_tw || '';
+          const dateB = b.updated_at_tw || b.created_at_tw || '';
+          return dateB.localeCompare(dateA);
+        });
+        
+        const displayComments = recentComments.slice(0, 3);
+        
+        commentHTML += `
+          <div class="comment-section">
+            <div class="comment-header">
+              <span>📋 近期主管註解</span>
+              <span class="comment-badge">${displayComments.length}筆</span>
+            </div>
+            <div class="comment-content">
+              ${displayComments.map((leave, index) => {
+                const checkDate = leave.updated_at_tw || leave.created_at_tw || '';
+                const datePart = checkDate.split(' ')[0] || '';
+                const timePart = checkDate.split(' ')[1] ? checkDate.split(' ')[1].substring(0, 5) : '';
+                const commentPreview = leave.comment.length > 60 ? 
+                  leave.comment.substring(0, 60) + '...' : 
+                  leave.comment;
+                
+                return `
+                  <div class="comment-recent-item">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                      <div>
+                        <strong style="color: #0284c7;">${leave.type || '申請'}</strong>
+                        <span style="font-size: 10px; color: #64748b; margin-left: 6px;">
+                          ${datePart}
+                        </span>
+                      </div>
+                      <span style="font-size: 10px; color: ${leave.approved === 1 ? '#059669' : leave.withdrawn === 1 ? '#9ca3af' : '#d97706'};">
+                        ${leave.withdrawn === 1 ? '已撤回' : leave.approved === 1 ? '已核准' : '審核中'}
+                      </span>
+                    </div>
+                    <div style="font-size: 12px; color: #475569;">
+                      ${commentPreview.replace(/\n/g, ' ')}
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+            <div class="comment-date">
+              <span>最近7天內有 ${recentComments.length} 筆註解</span>
+              <button class="comment-view-all" onclick="location.href='HR.html'">
+                查看全部
+              </button>
+            </div>
+          </div>
+        `;
+      } else {
+        commentHTML = `
+          <div class="comment-section">
+            <div class="comment-header">
+              <span>💬 主管註解</span>
+            </div>
+            <div class="comment-empty">
+              目前尚無主管註解記錄
+              <div style="margin-top: 8px; font-size: 11px; color: #94a3b8;">
+                • 註解會顯示在請假/出差/會議申請的下方<br>
+                • 請確認您今天是否有相關申請<br>
+                • 如有疑問請聯繫 HR 部門
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    }
+    
+    commentSection.innerHTML = commentHTML;
+    
+    console.log('註解顯示完成:', {
+      今天申請數量: todayLeaves.length,
+      今天申請詳情: todayLeaves.map(l => ({ type: l.type, 註解長度: l.comment?.length }))
+    });
+    
+  } catch (error) {
+    console.error('載入主管註解失敗:', error);
+    commentSection.innerHTML = `
+      <div class="comment-error">
+        ❌ 無法載入主管註解<br>
+        <small style="color: #9ca3af;">錯誤：${error.message}</small>
+        <div style="margin-top: 8px;">
+          <button class="comment-view-all" onclick="loadComments()">
+            重新載入
+          </button>
+          <button class="comment-view-all" onclick="testAPI()" style="margin-left: 8px; background: #dc2626;">
+            測試 API
+          </button>
+        </div>
+      </div>
+    `;
+  }
+}
+
+/* ===== 測試 API 函數（偵錯用）===== */
+async function testAPI() {
+  try {
+    console.log('=== 測試 API 開始 ===');
+    
+    console.log('測試請假 API:', API_LEAVE);
+    const leaveResponse = await fetch(API_LEAVE);
+    console.log('API 回應狀態:', leaveResponse.status);
+    
+    const text = await leaveResponse.text();
+    console.log('API 回應內容:', text);
+    
+    try {
+      const data = JSON.parse(text);
+      console.log('解析後的資料:', data);
+      
+      const userData = Array.isArray(data) ? 
+        data.filter(item => item.name === name) : 
+        [];
+      console.log(`使用者 ${name} 的資料:`, userData);
+      
+      alert(`API 測試完成：\n狀態: ${leaveResponse.status}\n資料數量: ${Array.isArray(data) ? data.length : 'N/A'}\n您的資料: ${userData.length} 筆`);
+      
+    } catch (parseError) {
+      console.error('解析 JSON 失敗:', parseError);
+      alert(`API 回傳非 JSON 格式：\n${text.substring(0, 200)}...`);
+    }
+    
+    console.log('=== 測試 API 結束 ===');
+  } catch (error) {
+    console.error('API 測試失敗:', error);
+    alert(`API 測試失敗：${error.message}`);
+  }
+}
+
 /* ===== 狀態顯示 ===== */
 let todayRecords = [];
 let todayInCount = 0;
@@ -771,7 +1104,6 @@ let todayOutCount = 0;
 
 async function loadStatus() {
   try {
-    // 取得打卡紀錄
     const data = await (await fetch(API_REC)).json();
     todayRecords = [];
     todayInCount = 0;
@@ -779,12 +1111,9 @@ async function loadStatus() {
     let firstInTime = "", lastInTime = "";
     let firstOutTime = "", lastOutTime = "";
 
-    // 使用台灣時間判斷今日紀錄
     data.forEach(r => {
-      // 確保紀錄有時間資料
       if (!r.created_at_tw) return;
       
-      // 解析紀錄時間
       const recordDateStr = r.created_at_tw.split(' ')[0];
       
       if (r.name === name && recordDateStr === today) {
@@ -813,13 +1142,10 @@ async function loadStatus() {
       }
     });
 
-    // 取得出差/會議資訊
     const { todayBiz, yesterdayBiz, tomorrowBiz } = await getBusinessInfo();
     
-    // 建立狀態顯示HTML
     let statusHTML = "";
     
-    // 顯示今日打卡狀態
     statusHTML += `<div class="status-record">
       <div class="status-title">
         📊 今日打卡狀態
@@ -850,7 +1176,6 @@ async function loadStatus() {
       </div>
     </div>`;
     
-    // 檢查今天是否為假日
     let holiday = "";
     for (const h of HOLIDAYS) {
       if (today >= h.start && today <= h.end) { 
@@ -859,12 +1184,10 @@ async function loadStatus() {
       }
     }
     
-    // 計算明天日期
     const taiwanTomorrow = new Date(now);
     taiwanTomorrow.setDate(taiwanTomorrow.getDate() + 1);
     const tomorrowStr = formatTaiwanDate(taiwanTomorrow);
     
-    // 檢查明天是否是假日
     let tomorrowHoliday = "";
     for (const h of HOLIDAYS) {
       if (tomorrowStr >= h.start && tomorrowStr <= h.end) { 
@@ -873,7 +1196,6 @@ async function loadStatus() {
       }
     }
     
-    // 假日顯示邏輯
     if (holiday) {
       statusHTML += `<div class="reminder-today">
         🎌 今日為 <strong>${holiday}</strong>，免打卡
@@ -881,7 +1203,6 @@ async function loadStatus() {
       btnIn.disabled = true;
       btnOut.disabled = true;
       
-      // 即使在假日，也顯示今天的出差/會議資訊
       if (todayBiz) {
         statusHTML += createBusinessDetailsHTML(todayBiz, true);
       }
@@ -890,31 +1211,24 @@ async function loadStatus() {
       btnIn.disabled = true;
       btnOut.disabled = true;
       
-      // 週末也顯示今天的出差/會議資訊
       if (todayBiz) {
         statusHTML += createBusinessDetailsHTML(todayBiz, true);
       }
     } else {
-      // 正常工作日或出差/會議期間
       if (todayBiz) {
-        // 顯示會議/出差詳細資訊
         statusHTML += createBusinessDetailsHTML(todayBiz, true);
-        // 會議/出差期間仍然可以打卡，但有限制
         btnIn.disabled = todayInCount >= MAX_PUNCH_PER_ACTION || isInCooldown();
         btnOut.disabled = todayOutCount >= MAX_PUNCH_PER_ACTION || isInCooldown() || todayInCount === 0;
       } else {
-        // 正常工作日，有限制
         btnIn.disabled = todayInCount >= MAX_PUNCH_PER_ACTION || isInCooldown();
         btnOut.disabled = todayOutCount >= MAX_PUNCH_PER_ACTION || isInCooldown() || todayInCount === 0;
       }
     }
     
-    // 顯示明天出差/會議提醒
     if (tomorrowBiz) {
       statusHTML += createBusinessDetailsHTML(tomorrowBiz, false);
     }
     
-    // 顯示明天假日提醒
     if (tomorrowHoliday) {
       statusHTML += `<div class="reminder-tomorrow">
         🎌 明日為 <strong>${tomorrowHoliday}</strong><br>
@@ -922,7 +1236,6 @@ async function loadStatus() {
       </div>`;
     }
     
-    // 顯示昨天出差/會議資訊
     if (yesterdayBiz) {
       statusHTML += `<div class="reminder-yesterday">
         📌 昨日為 <strong>${yesterdayBiz.type}</strong> 期間<br>
@@ -930,7 +1243,6 @@ async function loadStatus() {
       </div>`;
     }
     
-    // 檢查冷卻時間
     if (isInCooldown() && !holiday && now.getDay() !== 0 && now.getDay() !== 6) {
       const remainingSeconds = getCooldownRemaining();
       statusHTML += `<div class="reminder-cooldown">
@@ -938,7 +1250,6 @@ async function loadStatus() {
       </div>`;
     }
     
-    // 檢查是否遲到提醒（僅在正常工作日且無出差/會議時提醒）
     if (!holiday && now.getDay() !== 0 && now.getDay() !== 6 && !todayBiz) {
       const hhmm = now.getHours() * 100 + now.getMinutes();
       if (hhmm >= 910 && todayInCount === 0) {
@@ -949,26 +1260,21 @@ async function loadStatus() {
       }
     }
     
-    // 顯示今日詳細打卡紀錄（含距離資訊）
     if (todayRecords.length > 0) {
       statusHTML += `<div class="status-record" style="margin-top:12px;">
         <div class="status-title">📋 今日打卡明細（${todayRecords.length}筆）</div>`;
       
-      // 按時間排序
       todayRecords.sort((a, b) => a.fullTime.localeCompare(b.fullTime)).forEach((record, index) => {
         const actionClass = record.action === "上班" ? "action-in" : "action-out";
         const actionEmoji = record.action === "上班" ? "🏢" : "🏠";
         
-        // 計算距離（如果沒有從API返回的距離，則計算）
         let displayDistance = "距離未知";
         let distanceClass = "";
         
         if (record.distance !== null && !isNaN(record.distance)) {
-          // 使用API返回的距離
           displayDistance = formatDistance(record.distance);
           distanceClass = getDistanceClass(record.distance);
         } else if (record.lat && record.lng) {
-          // 計算距離
           const distance = distanceMeter(COMPANY_LAT, COMPANY_LNG, record.lat, record.lng);
           displayDistance = formatDistance(distance);
           distanceClass = getDistanceClass(distance);
@@ -996,6 +1302,8 @@ async function loadStatus() {
     
     statusBox.innerHTML = statusHTML;
     
+    await loadComments();
+    
   } catch (error) {
     console.error("載入狀態失敗:", error);
     statusBox.innerHTML = `<div style="color:#dc2626;padding:10px;background:#fee2e2;border-radius:8px;">
@@ -1004,6 +1312,13 @@ async function loadStatus() {
       時間：${formatTaiwanDateTime(getTaiwanDate())}
     </div>`;
     log(`❌ 載入狀態失敗: ${error.message}`);
+    
+    commentSection.innerHTML = `
+      <div class="comment-error">
+        ❌ 無法載入主管註解<br>
+        <small>系統錯誤，請稍後再試</small>
+      </div>
+    `;
   }
 }
 
@@ -1018,27 +1333,23 @@ setInterval(() => {
 
 /* ===== 打卡（有限制）===== */
 function punch(action) {
-  // 檢查冷卻時間
   if (isInCooldown()) {
     const remainingSeconds = getCooldownRemaining();
     alert(`⏳ 請等待 ${formatCooldownTime(remainingSeconds)} 後再打卡`);
     return;
   }
   
-  // 檢查次數限制
   const count = action === "上班" ? todayInCount : todayOutCount;
   if (count >= MAX_PUNCH_PER_ACTION) {
     alert(`❌ ${action} 已達今日上限（${MAX_PUNCH_PER_ACTION}次）`);
     return;
   }
   
-  // 檢查下班前是否已上班
   if (action === "下班" && todayInCount === 0) {
     alert("❌ 請先打卡上班後再打卡下班");
     return;
   }
   
-  // 第二次打卡確認
   if (count === 1) {
     if (!confirm(`⚠️ 您今天已經打過一次「${action}」\n是否確定要進行第二次修正打卡？`)) {
       return;
@@ -1061,13 +1372,14 @@ function punch(action) {
       });
 
       if (response.ok) {
-        // 設定冷卻時間
         setCooldown();
         
         const distanceClass = getDistanceClass(dist);
         const formattedDist = formatDistance(dist);
         log(`✅ ${action} 成功｜距公司 <span class="distance-badge ${distanceClass}">${formattedDist}</span>｜時間：${currentTime}`);
+        
         loadStatus();
+        loadComments();
       } else {
         log(`❌ ${action} 失敗｜時間：${currentTime}`);
       }
@@ -1120,7 +1432,6 @@ async function loadMonthly() {
   try {
     const data = await (await fetch(API_REC)).json();
 
-    // 使用台灣時間取得當前年月
     const taiwanNow = getTaiwanDate();
     const currentYear = taiwanNow.getFullYear();
     const currentMonth = String(taiwanNow.getMonth() + 1).padStart(2, '0');
@@ -1133,7 +1444,6 @@ async function loadMonthly() {
       return recordDateStr.startsWith(currentYM);
     });
 
-    // 依日期分組
     const byDate = {};
     records.forEach(r => {
       const recordDateStr = r.created_at_tw.split(' ')[0];
@@ -1147,7 +1457,7 @@ async function loadMonthly() {
       <hr style="border:none;border-top:1px dashed #4b5563;margin:8px 0;">
     </div>`;
 
-    const dates = Object.keys(byDate).sort().reverse(); // 最新日期在前
+    const dates = Object.keys(byDate).sort().reverse();
     
     if (dates.length === 0) {
       html += `<div style="text-align:center;padding:20px;color:#6b7280;">
@@ -1167,13 +1477,11 @@ async function loadMonthly() {
           </div>
           <div class="record-items">`;
         
-        // 排序時間，讓最早的在前
         byDate[date].sort((a, b) => a.created_at_tw.localeCompare(b.created_at_tw)).forEach((r, index) => {
           const timePart = r.created_at_tw.split(' ')[1] || "";
           const actionClass = r.action === "上班" ? "action-in" : "action-out";
           const actionEmoji = r.action === "上班" ? "🏢" : "🏠";
           
-          // 計算距離
           let distanceInfo = "";
           if (r.lat && r.lng) {
             const distance = distanceMeter(COMPANY_LAT, COMPANY_LNG, r.lat, r.lng);
@@ -1191,7 +1499,6 @@ async function loadMonthly() {
           </div>`;
         });
         
-        // 統計該日打卡次數
         const dayInCount = byDate[date].filter(r => r.action === "上班").length;
         const dayOutCount = byDate[date].filter(r => r.action === "下班").length;
         
@@ -1205,7 +1512,6 @@ async function loadMonthly() {
         html += `</div></div>`;
       });
       
-      // 月統計
       const totalIn = records.filter(r => r.action === "上班").length;
       const totalOut = records.filter(r => r.action === "下班").length;
       const totalRecords = records.length;
@@ -1238,6 +1544,19 @@ async function loadMonthly() {
     </div>`;
   }
 }
+
+// 加入 CSS 動畫
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+document.head.appendChild(style);
+
+// 每5分鐘自動更新註解
+setInterval(loadComments, 5 * 60 * 1000);
 </script>
 </body>
 </html>
