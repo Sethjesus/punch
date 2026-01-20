@@ -467,18 +467,19 @@ button:disabled{opacity:.4;cursor:not-allowed}
   border: 1px solid #fecaca;
 }
 
-.comment-view-all {
+.comment-reload-btn {
   background: #0284c7;
   color: white;
   border: none;
-  padding: 4px 10px;
+  padding: 4px 12px;
   border-radius: 4px;
   font-size: 11px;
   cursor: pointer;
   font-weight: 600;
+  margin-top: 8px;
 }
 
-.comment-view-all:hover {
+.comment-reload-btn:hover {
   background: #0369a1;
 }
 
@@ -535,7 +536,6 @@ button:disabled{opacity:.4;cursor:not-allowed}
   <!-- 次功能 -->
   <div class="sub">
     <button onclick="location.href='Leave.html'">📝 請假 / 出差 / 會議</button>
-    <button onclick="location.href='HR.html'">📊 HR 總覽</button>
     <button onclick="toggleMonthly()">📅 當月打卡紀錄</button>
     <button id="btnInstall" style="display:none">⬇ 下載 App</button>
   </div>
@@ -550,7 +550,6 @@ button:disabled{opacity:.4;cursor:not-allowed}
 const API_PUNCH = "https://punch-api.jackey1688.workers.dev/api/punch";
 const API_REC = "https://punch-api.jackey1688.workers.dev/api/records";
 const API_LEAVE = "https://punch-api.jackey1688.workers.dev/api/leave";
-const API_COMMENT = "https://punch-api.jackey1688.workers.dev/api/leave/comment";
 
 /* ===== 公司座標 ===== */
 const COMPANY_LAT = 25.00657;
@@ -844,7 +843,7 @@ function createBusinessDetailsHTML(biz, isToday = true) {
   return html;
 }
 
-/* ===== 載入主管註解（修正版）===== */
+/* ===== 載入主管註解 ===== */
 async function loadComments() {
   try {
     const today = formatTaiwanDate(getTaiwanDate());
@@ -877,6 +876,7 @@ async function loadComments() {
     const userLeaves = allLeaves.filter(leave => leave.name === name);
     console.log(`使用者 ${name} 的請假記錄:`, userLeaves);
     
+    // 找出今天相關且有註解的申請
     const todayLeaves = allLeaves.filter(leave => {
       if (!leave.name || leave.name !== name) return false;
       if (!leave.start_date || !leave.end_date) return false;
@@ -887,18 +887,6 @@ async function loadComments() {
       const isTodayInRange = today >= startDate && today <= endDate;
       const hasComment = leave.comment && leave.comment.trim() !== '';
       
-      console.log(`檢查申請:`, {
-        name: leave.name,
-        type: leave.type,
-        start: startDate,
-        end: endDate,
-        today: today,
-        inRange: isTodayInRange,
-        hasComment: hasComment,
-        comment: leave.comment,
-        approved: leave.approved
-      });
-      
       return isTodayInRange && hasComment;
     });
     
@@ -907,6 +895,7 @@ async function loadComments() {
     let commentHTML = '';
     
     if (todayLeaves.length > 0) {
+      // 顯示今天的註解
       todayLeaves.forEach((leave, index) => {
         let dateStr = today;
         let timeStr = '';
@@ -948,6 +937,7 @@ async function loadComments() {
         `;
       });
     } else {
+      // 檢查最近7天內是否有註解
       const sevenDaysAgo = new Date(getTaiwanDate());
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       const sevenDaysAgoStr = formatTaiwanDate(sevenDaysAgo);
@@ -966,12 +956,14 @@ async function loadComments() {
       console.log(`最近7天內的註解:`, recentComments);
       
       if (recentComments.length > 0) {
+        // 按時間倒序排序
         recentComments.sort((a, b) => {
           const dateA = a.updated_at_tw || a.created_at_tw || '';
           const dateB = b.updated_at_tw || b.created_at_tw || '';
           return dateB.localeCompare(dateA);
         });
         
+        // 只顯示最近的3筆註解
         const displayComments = recentComments.slice(0, 3);
         
         commentHTML += `
@@ -1011,13 +1003,11 @@ async function loadComments() {
             </div>
             <div class="comment-date">
               <span>最近7天內有 ${recentComments.length} 筆註解</span>
-              <button class="comment-view-all" onclick="location.href='HR.html'">
-                查看全部
-              </button>
             </div>
           </div>
         `;
       } else {
+        // 完全沒有註解
         commentHTML = `
           <div class="comment-section">
             <div class="comment-header">
@@ -1026,9 +1016,7 @@ async function loadComments() {
             <div class="comment-empty">
               目前尚無主管註解記錄
               <div style="margin-top: 8px; font-size: 11px; color: #94a3b8;">
-                • 註解會顯示在請假/出差/會議申請的下方<br>
-                • 請確認您今天是否有相關申請<br>
-                • 如有疑問請聯繫 HR 部門
+                主管的註解會顯示在這裡
               </div>
             </div>
           </div>
@@ -1050,50 +1038,12 @@ async function loadComments() {
         ❌ 無法載入主管註解<br>
         <small style="color: #9ca3af;">錯誤：${error.message}</small>
         <div style="margin-top: 8px;">
-          <button class="comment-view-all" onclick="loadComments()">
+          <button class="comment-reload-btn" onclick="loadComments()">
             重新載入
-          </button>
-          <button class="comment-view-all" onclick="testAPI()" style="margin-left: 8px; background: #dc2626;">
-            測試 API
           </button>
         </div>
       </div>
     `;
-  }
-}
-
-/* ===== 測試 API 函數（偵錯用）===== */
-async function testAPI() {
-  try {
-    console.log('=== 測試 API 開始 ===');
-    
-    console.log('測試請假 API:', API_LEAVE);
-    const leaveResponse = await fetch(API_LEAVE);
-    console.log('API 回應狀態:', leaveResponse.status);
-    
-    const text = await leaveResponse.text();
-    console.log('API 回應內容:', text);
-    
-    try {
-      const data = JSON.parse(text);
-      console.log('解析後的資料:', data);
-      
-      const userData = Array.isArray(data) ? 
-        data.filter(item => item.name === name) : 
-        [];
-      console.log(`使用者 ${name} 的資料:`, userData);
-      
-      alert(`API 測試完成：\n狀態: ${leaveResponse.status}\n資料數量: ${Array.isArray(data) ? data.length : 'N/A'}\n您的資料: ${userData.length} 筆`);
-      
-    } catch (parseError) {
-      console.error('解析 JSON 失敗:', parseError);
-      alert(`API 回傳非 JSON 格式：\n${text.substring(0, 200)}...`);
-    }
-    
-    console.log('=== 測試 API 結束 ===');
-  } catch (error) {
-    console.error('API 測試失敗:', error);
-    alert(`API 測試失敗：${error.message}`);
   }
 }
 
