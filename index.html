@@ -105,6 +105,30 @@ button:disabled{opacity:.4;cursor:not-allowed}
   font-weight:800;
 }
 
+/* HR按鈕樣式 */
+#btnHR {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  color: white;
+  font-weight: 700;
+  position: relative;
+  overflow: hidden;
+}
+
+#btnHR:before {
+  content: "👑";
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+}
+
+#btnHR:hover {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  transform: translateY(-2px);
+  transition: all 0.2s;
+}
+
 /* Log */
 .log{
   margin-top:12px;
@@ -537,6 +561,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
   <div class="sub">
     <button onclick="location.href='Leave.html'">📝 請假 / 出差 / 會議</button>
     <button onclick="toggleMonthly()">📅 當月打卡紀錄</button>
+    <button onclick="location.href='https://sethjesus.github.io/punch/HR.html'" id="btnHR">👑 HR 系統</button>
     <button id="btnInstall" style="display:none">⬇ 下載 App</button>
   </div>
 
