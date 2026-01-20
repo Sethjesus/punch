@@ -555,20 +555,13 @@ function drawTable(){
 }
 
 /* =====================
-   EXCEL EXPORT (FULL)
-   - 每人一張 Sheet
-   - 國定假日/週末底色
-   - 距離>35m紅底
-   - 撤回不匯出
-   - 狀態 + 主管註解
-   - Daily Summary
-   - 日期交替顏色（白/灰交替）
+   EXCEL EXPORT (FULL) - 修正版（加入日期分組空行）
 ===================== */
 function exportExcel(){
   const wb = XLSX.utils.book_new();
   const month = document.getElementById("monthPicker").value || "";
 
-  // 重建資料
+  // 重建資料 - 修正欄位順序
   const rowsAll = [];
 
   // 1) 打卡列（含請假狀態/註解）
@@ -604,19 +597,19 @@ function exportExcel(){
       date: date,
       sortTime: r.created_at_tw,
       data: [
-        date,
-        (w.isHoliday ? "國定假日" : w.label) + (w.holidayName ? "｜"+w.holidayName : ""),
-        r.name,
-        r.action,
-        r.action==="上班" ? time : "",
-        r.action==="下班" ? time : "",
-        gpsText,
-        distVal,
-        leave ? leave.type : "",
-        leave ? (leave.start_date+" ~ "+leave.end_date) : "",
-        leave ? String(leave.reason||"").replace(/\n/g," ") : "",
-        statusText,
-        commentText
+        date,  // A: 日期
+        (w.isHoliday ? "國定假日" : w.label) + (w.holidayName ? "｜"+w.holidayName : ""),  // B: 星期
+        r.name,  // C: 姓名
+        r.action,  // D: 類型
+        r.action==="上班" ? time : "",  // E: 上班時間
+        r.action==="下班" ? time : "",  // F: 下班時間
+        gpsText,  // G: GPS
+        distVal,  // H: 距公司(m)
+        leave ? leave.type : "",  // I: 申請類型
+        leave ? (leave.start_date+" ~ "+leave.end_date) : "",  // J: 期間
+        leave ? String(leave.reason||"").replace(/\n/g," ") : "",  // K: 詳細
+        statusText,  // L: 狀態
+        commentText  // M: 主管註解
       ]
     });
   });
@@ -655,19 +648,19 @@ function exportExcel(){
           date: cur,
           sortTime: cur + "T23:59:59", // 申請放在當天最後
           data: [
-            cur,
-            (w.isHoliday ? "國定假日" : w.label) + (w.holidayName ? "｜"+w.holidayName : ""),
-            l.name,
-            "申請",
-            "",
-            "",
-            "",
-            "",
-            l.type,
-            l.start_date+" ~ "+l.end_date,
-            String(l.reason||"").replace(/\n/g," "),
-            (l.approved===1 ? "已核准" : "審核中"),
-            (l.comment || "")
+            cur,  // A: 日期
+            (w.isHoliday ? "國定假日" : w.label) + (w.holidayName ? "｜"+w.holidayName : ""),  // B: 星期
+            l.name,  // C: 姓名
+            "申請",  // D: 類型
+            "",  // E: 上班時間
+            "",  // F: 下班時間
+            "",  // G: GPS
+            "",  // H: 距公司(m)
+            l.type,  // I: 申請類型
+            l.start_date+" ~ "+l.end_date,  // J: 期間
+            String(l.reason||"").replace(/\n/g," "),  // K: 詳細
+            (l.approved===1 ? "已核准" : "審核中"),  // L: 狀態
+            (l.comment || "")  // M: 主管註解
           ]
         });
         break;
@@ -688,78 +681,185 @@ function exportExcel(){
     people[name].push(row);
   });
 
-  // 每人 Sheet
-  const header = ["日期","星期","姓名","類型","上班","下班","GPS","距公司(m)","申請類型","期間","詳細","狀態","主管註解"];
+  // 每人 Sheet - 修正欄位順序，加入日期分組空行
+  const header = [
+    "日期", "星期", "姓名", "類型", 
+    "上班", "下班", "GPS", "距公司(m)", 
+    "申請類型", "期間", "詳細", "狀態", "主管註解"
+  ];
 
   Object.keys(people).forEach(name=>{
     const rowsForPerson = people[name];
-    const aoa = [header, ...rowsForPerson.map(r => r.data)];
+    
+    // 按日期分組
+    const rowsByDate = {};
+    let lastDate = "";
+    
+    rowsForPerson.forEach(row => {
+      const date = row.date;
+      if (!rowsByDate[date]) {
+        rowsByDate[date] = [];
+      }
+      rowsByDate[date].push(row);
+    });
+    
+    // 建立帶有空行的資料陣列
+    const aoa = [header];
+    const dates = Object.keys(rowsByDate).sort().reverse(); // 日期從新到舊
+    
+    dates.forEach((date, dateIndex) => {
+      const dateRows = rowsByDate[date];
+      
+      // 按時間排序：上班在前，下班在後，申請在最後
+      dateRows.sort((a, b) => {
+        // 上班優先於下班優先於申請
+        const typeOrder = { "上班": 1, "下班": 2, "申請": 3 };
+        const aType = a.data[3];
+        const bType = b.data[3];
+        
+        if (typeOrder[aType] !== typeOrder[bType]) {
+          return typeOrder[aType] - typeOrder[bType];
+        }
+        
+        // 同類型按時間排序
+        return a.sortTime.localeCompare(b.sortTime);
+      });
+      
+      // 加入該日期的所有資料
+      dateRows.forEach(row => {
+        aoa.push(row.data);
+      });
+      
+      // 如果不是最後一個日期，加入空行
+      if (dateIndex < dates.length - 1) {
+        aoa.push(Array(13).fill("")); // 13個欄位的空行
+      }
+    });
+    
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     
-    // 設定欄寬
+    // 修正欄寬設定
     ws["!cols"] = [
-      {wch:12},{wch:18},{wch:10},{wch:6},
-      {wch:10},{wch:10},{wch:22},{wch:12},
-      {wch:10},{wch:22},{wch:34},{wch:8},{wch:24}
+      {wch:12},  // A: 日期
+      {wch:18},  // B: 星期
+      {wch:10},  // C: 姓名
+      {wch:8},   // D: 類型（上班/下班/申請）
+      {wch:10},  // E: 上班時間
+      {wch:10},  // F: 下班時間
+      {wch:24},  // G: GPS（加寬顯示座標）
+      {wch:12},  // H: 距公司(m)
+      {wch:10},  // I: 申請類型
+      {wch:22},  // J: 期間
+      {wch:34},  // K: 詳細
+      {wch:10},  // L: 狀態
+      {wch:24}   // M: 主管註解
     ];
-
-    // 取得所有日期（從新到舊）
-    const allDates = rowsForPerson.map(r => r.date);
-    const uniqueDates = [...new Set(allDates)].sort((a, b) => b.localeCompare(a));
     
-    // 建立日期到顏色的映射（白/灰交替）
-    const dateColorMap = new Map();
-    uniqueDates.forEach((date, index) => {
-      dateColorMap.set(date, index % 2 === 0 ? "FFFFFF" : "F5F5F5");
+    // 設定格式（包含日期分組背景色）
+    let currentRow = 2; // 從第2行開始（第1行是標題）
+    
+    dates.forEach((date, dateIndex) => {
+      const dateRows = rowsByDate[date];
+      const dateRowCount = dateRows.length;
+      
+      // 為該日期分組設定背景色
+      for (let i = 0; i < dateRowCount; i++) {
+        const rowNum = currentRow + i;
+        const isEvenRow = rowNum % 2 === 0;
+        
+        // 設定整行背景色（淺灰色）
+        const columns = ["A","B","C","D","E","F","G","H","I","J","K","L","M"];
+        columns.forEach(col => {
+          const cellRef = col + rowNum;
+          const cell = ws[cellRef];
+          if(!cell) return;
+          
+          if(!cell.s) cell.s = {};
+          if(!cell.s.fill) cell.s.fill = {};
+          if(!cell.s.fill.fgColor) cell.s.fill.fgColor = {};
+          
+          // 奇數行淺灰色，偶數行白色
+          cell.s.fill.fgColor.rgb = isEvenRow ? "F8F9FA" : "FFFFFF";
+        });
+        
+        // 日期欄位特殊格式（第一行顯示完整日期，其他行留空）
+        const dateCell = ws["A" + rowNum];
+        if (dateCell && i > 0) {
+          // 同一日期的後續行，日期欄位留空
+          dateCell.v = "";
+        }
+      }
+      
+      currentRow += dateRowCount;
+      
+      // 如果不是最後一個日期，跳過空行
+      if (dateIndex < dates.length - 1) {
+        currentRow += 1; // 空行
+      }
     });
-
-    // 套用樣式到每一行
+    
+    // 設定特殊格式
     for(let i = 2; i <= aoa.length; i++){
       const dateStr = aoa[i-1][0];
       if(!dateStr) continue;
       
-      // 決定底色
-      let backgroundColor = dateColorMap.get(dateStr) || "FFFFFF";
-      
-      // 檢查特殊日期
       const d = new Date(dateStr);
       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
       const holiday = HOLIDAY_RANGES.some(h => dateStr >= h.start && dateStr <= h.end);
       
-      if(holiday){
-        backgroundColor = "FFF4CC"; // 國定假日黃色
-      }else if(isWeekend){
-        backgroundColor = "FFECEC"; // 週末淺紅色
+      // 特殊日期的顏色（覆蓋分組顏色）
+      if(holiday || isWeekend){
+        const columns = ["A","B","C","D","E","F","G","H","I","J","K","L","M"];
+        columns.forEach(col => {
+          const cellRef = col + i;
+          const cell = ws[cellRef];
+          if(!cell || !cell.v) return;
+          
+          if(!cell.s) cell.s = {};
+          if(!cell.s.fill) cell.s.fill = {};
+          if(!cell.s.fill.fgColor) cell.s.fill.fgColor = {};
+          
+          if(holiday){
+            cell.s.fill.fgColor.rgb = "FFF4CC"; // 國定假日黃色
+          }else if(isWeekend){
+            cell.s.fill.fgColor.rgb = "FFECEC"; // 週末淺紅色
+          }
+        });
       }
-
-      // 套用底色到整行的每個儲存格
-      const columns = ["A","B","C","D","E","F","G","H","I","J","K","L","M"];
-      columns.forEach(col => {
-        const cellRef = col + i;
-        const cell = ws[cellRef];
-        if(!cell) return;
+      
+      // 距離欄位特殊處理 - 只處理H欄
+      const distCell = ws["H"+i];
+      if(distCell && !isNaN(Number(distCell.v)) && Number(distCell.v) > 35){
+        if(!distCell.s) distCell.s = {};
+        if(!distCell.s.fill) distCell.s.fill = {};
+        if(!distCell.s.fill.fgColor) distCell.s.fill.fgColor = {};
+        distCell.s.fill.fgColor.rgb = "C0392B"; // 紅色
         
-        // 確保有樣式物件
-        if(!cell.s) cell.s = {};
-        if(!cell.s.fill) cell.s.fill = {};
-        if(!cell.s.fill.fgColor) cell.s.fill.fgColor = {};
-        
-        // 距離欄位特殊處理
-        if(col === "H" && Number(cell.v) > 35){
-          cell.s.fill.fgColor.rgb = "C0392B";
-          if(!cell.s.font) cell.s.font = {};
-          cell.s.font.color = { rgb: "FFFFFF" };
-          cell.s.font.bold = true;
-        } else {
-          cell.s.fill.fgColor.rgb = backgroundColor;
+        if(!distCell.s.font) distCell.s.font = {};
+        distCell.s.font.color = { rgb: "FFFFFF" }; // 白色字
+        distCell.s.font.bold = true;
+      }
+      
+      // 申請類型的特殊處理（補修、特休等）
+      const leaveTypeCell = ws["I"+i];
+      if(leaveTypeCell && leaveTypeCell.v){
+        const type = String(leaveTypeCell.v);
+        if(type === "出差"){
+          leaveTypeCell.s = leaveTypeCell.s || {};
+          leaveTypeCell.s.font = leaveTypeCell.s.font || {};
+          leaveTypeCell.s.font.color = { rgb: "27AE60" }; // 綠色
+        }else if(type === "加班"){
+          leaveTypeCell.s = leaveTypeCell.s || {};
+          leaveTypeCell.s.font = leaveTypeCell.s.font || {};
+          leaveTypeCell.s.font.color = { rgb: "2980B9" }; // 藍色
         }
-      });
+      }
     }
 
     XLSX.utils.book_append_sheet(wb, ws, name.substring(0,31));
   });
 
-  // Daily Summary
+  // Daily Summary（也加入日期分組）
   const summary = {};
   rowsAll.forEach(row=>{
     const r = row.data;
@@ -782,72 +882,95 @@ function exportExcel(){
     summary[key].maxDist = Math.max(summary[key].maxDist, dist);
   });
 
-  // 將 summary 轉為陣列並排序（最新在上）
+  // 將 summary 轉為陣列並按日期分組
   const summaryArray = Object.values(summary);
   summaryArray.sort((a, b) => b.date.localeCompare(a.date));
-
+  
+  // 按日期分組
+  const summaryByDate = {};
+  summaryArray.forEach(item => {
+    const date = item.date;
+    if (!summaryByDate[date]) {
+      summaryByDate[date] = [];
+    }
+    summaryByDate[date].push(item);
+  });
+  
+  const dates = Object.keys(summaryByDate).sort().reverse();
   const sumAoa = [["日期","姓名","最早上班","最晚下班","最遠距離(m)"]];
-  summaryArray.forEach(v=>{
-    sumAoa.push([v.date, v.name, v.earliest, v.latest, v.maxDist]);
+  
+  dates.forEach((date, dateIndex) => {
+    const dateSummaries = summaryByDate[date];
+    
+    // 按姓名排序
+    dateSummaries.sort((a, b) => a.name.localeCompare(b.name));
+    
+    dateSummaries.forEach(item => {
+      sumAoa.push([item.date, item.name, item.earliest, item.latest, item.maxDist]);
+    });
+    
+    // 如果不是最後一個日期，加入空行
+    if (dateIndex < dates.length - 1) {
+      sumAoa.push(Array(5).fill("")); // 5個欄位的空行
+    }
   });
 
   const wsSum = XLSX.utils.aoa_to_sheet(sumAoa);
   wsSum["!cols"] = [{wch:12},{wch:10},{wch:10},{wch:10},{wch:14}];
-
-  // Daily Summary 也套用日期交替色
-  const summaryDates = [...new Set(sumAoa.slice(1).map(row => row[0]).filter(Boolean))];
-  summaryDates.sort((a, b) => b.localeCompare(a));
   
-  const summaryDateColorMap = new Map();
-  summaryDates.forEach((date, index) => {
-    summaryDateColorMap.set(date, index % 2 === 0 ? "FFFFFF" : "F5F5F5");
-  });
-
-  // 套用樣式到 Summary
-  for(let i = 2; i <= sumAoa.length; i++){
-    const dateStr = sumAoa[i-1][0];
-    if(!dateStr) continue;
+  // 設定日期分組顏色
+  let currentRow = 2;
+  dates.forEach((date, dateIndex) => {
+    const dateSummaries = summaryByDate[date];
+    const dateRowCount = dateSummaries.length;
     
-    let backgroundColor = summaryDateColorMap.get(dateStr) || "FFFFFF";
-    
-    // 檢查特殊日期
-    const d = new Date(dateStr);
-    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-    const holiday = HOLIDAY_RANGES.some(h => dateStr >= h.start && dateStr <= h.end);
-    
-    if(holiday){
-      backgroundColor = "FFF4CC";
-    }else if(isWeekend){
-      backgroundColor = "FFECEC";
-    }
-
-    // 套用底色
-    ["A","B","C","D"].forEach(col => {
-      const cellRef = col + i;
-      const cell = wsSum[cellRef];
-      if(!cell) return;
+    for (let i = 0; i < dateRowCount; i++) {
+      const rowNum = currentRow + i;
+      const isEvenRow = rowNum % 2 === 0;
       
-      if(!cell.s) cell.s = {};
-      if(!cell.s.fill) cell.s.fill = {};
-      if(!cell.s.fill.fgColor) cell.s.fill.fgColor = {};
-      cell.s.fill.fgColor.rgb = backgroundColor;
-    });
-
-    // 距離欄位特殊處理
+      // 設定整行背景色
+      const columns = ["A","B","C","D","E"];
+      columns.forEach(col => {
+        const cellRef = col + rowNum;
+        const cell = wsSum[cellRef];
+        if(!cell) return;
+        
+        if(!cell.s) cell.s = {};
+        if(!cell.s.fill) cell.s.fill = {};
+        if(!cell.s.fill.fgColor) cell.s.fill.fgColor = {};
+        
+        cell.s.fill.fgColor.rgb = isEvenRow ? "F8F9FA" : "FFFFFF";
+      });
+      
+      // 同一日期的後續行，日期欄位留空
+      if (i > 0) {
+        const dateCell = wsSum["A" + rowNum];
+        if (dateCell) {
+          dateCell.v = "";
+        }
+      }
+    }
+    
+    currentRow += dateRowCount;
+    
+    // 如果不是最後一個日期，跳過空行
+    if (dateIndex < dates.length - 1) {
+      currentRow += 1;
+    }
+  });
+  
+  // Summary的距離超過35m標記
+  for(let i = 2; i <= sumAoa.length; i++){
     const distCell = wsSum["E"+i];
-    if(distCell && Number(distCell.v) > 35){
+    if(distCell && !isNaN(Number(distCell.v)) && Number(distCell.v) > 35){
       if(!distCell.s) distCell.s = {};
       if(!distCell.s.fill) distCell.s.fill = {};
       if(!distCell.s.fill.fgColor) distCell.s.fill.fgColor = {};
       distCell.s.fill.fgColor.rgb = "C0392B";
+      
       if(!distCell.s.font) distCell.s.font = {};
       distCell.s.font.color = { rgb: "FFFFFF" };
       distCell.s.font.bold = true;
-    }else if(distCell){
-      if(!distCell.s) distCell.s = {};
-      if(!distCell.s.fill) distCell.s.fill = {};
-      if(!distCell.s.fill.fgColor) distCell.s.fill.fgColor = {};
-      distCell.s.fill.fgColor.rgb = backgroundColor;
     }
   }
 
