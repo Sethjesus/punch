@@ -61,6 +61,8 @@ button{
 .primary{background:#3498db;color:#fff}
 .excel{background:#27ae60;color:#fff}
 .ghost{background:#e5e7eb;color:#111}
+.warning{background:#e74c3c;color:#fff}
+.caution{background:#f39c12;color:#fff}
 
 table{ width:100%; border-collapse:collapse; font-size:14px; }
 th,td{
@@ -79,6 +81,7 @@ th{
 .leaveOnly{background:#fff4cc}
 .tripRow{background:#e8ffe8}
 .otRow{background:#eaf4ff}
+.forgetRow{background:#ffebee}
 
 .weekendRow{ background:#ffecec }
 .weekendText{ color:#c0392b; font-weight:bold }
@@ -142,6 +145,27 @@ th{
   white-space:pre-wrap;
   word-break:break-word;
 }
+
+/* 特殊提醒區塊 */
+.forget-notice {
+  background: #ffebee;
+  border: 2px solid #e74c3c;
+  border-radius: 8px;
+  padding: 10px;
+  margin: 10px 0;
+  font-size: 13px;
+}
+.forget-notice strong {
+  color: #e74c3c;
+}
+.forget-badge {
+  background: #e74c3c;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  margin-left: 5px;
+}
 </style>
 </head>
 
@@ -167,9 +191,26 @@ th{
     <input type="month" id="monthPicker">
     <button class="primary" onclick="drawTable()">重新整理</button>
     <button class="excel" onclick="exportExcel()">匯出 Excel（每人分頁 + 統計）</button>
+    <button class="warning" onclick="showForgetPunchList()">📋 待核准忘記打卡</button>
+  </div>
+
+  <!-- 忘記打卡特別提醒區塊 -->
+  <div id="forgetPunchAlert" class="forget-notice" style="display:none;">
+    <strong>⚠️ 重要提醒：忘記打卡申請需要主管親自核准！</strong><br>
+    請仔細審核申請人的說明、實際工作時段及合理性，並在核准前確認實際出勤狀況。
+    <span id="forgetCount" style="font-weight:bold;color:#e74c3c;"></span>
   </div>
 
   <table id="tbl"></table>
+</div>
+
+<!-- 忘記打卡清單彈窗 -->
+<div id="forgetListModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10000;align-items:center;justify-content:center;">
+  <div style="background:white;padding:20px;border-radius:12px;max-width:800px;max-height:80vh;overflow:auto;">
+    <h3>📋 待核准的忘記打卡申請</h3>
+    <div id="forgetListContent" style="margin:15px 0;"></div>
+    <button class="primary" onclick="hideForgetList()">關閉</button>
+  </div>
 </div>
 
 <script>
@@ -236,7 +277,8 @@ function parseDetail(r){
   return String(r)
     .replace(/\n/g,"<br>")
     .replace(/【加班】/g,'<b style="color:#2980b9">【加班】</b>')
-    .replace(/【出差】/g,'<b style="color:#27ae60">【出差】</b>');
+    .replace(/【出差】/g,'<b style="color:#27ae60">【出差】</b>')
+    .replace(/【忘記打卡】/g,'<b style="color:#e74c3c">【忘記打卡】</b>');
 }
 
 function weekdayInfo(dateStr){
@@ -261,7 +303,7 @@ function nextDateStr(yyyy_mm_dd){
 }
 
 /* =====================
-   LOAD
+   載入資料
 ===================== */
 async function load(){
   records = await (await fetch(API_ATT)).json();
@@ -271,7 +313,7 @@ async function load(){
 load();
 
 /* =====================
-   MINI MAPS
+   迷你地圖
 ===================== */
 let mapQueue = [];
 function buildMiniMap(id, lat, lng){
@@ -298,7 +340,7 @@ function buildMiniMap(id, lat, lng){
 }
 
 /* =====================
-   APPROVE
+   核准請假（強化忘記打卡確認）
 ===================== */
 async function approveLeave(id){
   const leave = leaves.find(l => l.id === id);
@@ -308,6 +350,36 @@ async function approveLeave(id){
     alert("此申請已撤回，無法核准");
     drawTable();
     return;
+  }
+
+  // 特別處理忘記打卡申請
+  if(leave.type === "忘記打卡"){
+    // 顯示詳細資訊供主管審核
+    const reason = String(leave.reason || "").replace(/\n/g, "\n  ");
+    const confirmation = confirm(
+      `⚠️【忘記打卡申請】需要仔細審核！\n\n` +
+      `申請人：${leave.name}\n` +
+      `申請日期：${leave.start_date}\n` +
+      `申請原因：\n  ${reason}\n\n` +
+      `請確認：\n` +
+      `1. 申請人的說明是否合理\n` +
+      `2. 實際工作時段是否屬實\n` +
+      `3. 是否有其他佐證（如會議記錄、工作成果）\n\n` +
+      `確定要核准此忘記打卡申請嗎？`
+    );
+    
+    if(!confirmation) return;
+    
+    // 要求填寫核准備註
+    const comment = prompt("請填寫核准備註（例如：已確認實際出勤、理由合理等）：", leave.comment || "已確認實際出勤，核准通過。");
+    if(comment === null) return; // 使用者取消
+    
+    // 先更新備註
+    await fetch(API_COMMENT, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ id, comment: comment })
+    });
   }
 
   await fetch(API_APP,{
@@ -320,7 +392,7 @@ async function approveLeave(id){
 }
 
 /* =====================
-   COMMENT (WRITE BACK)
+   主管註解（強化忘記打卡提示）
 ===================== */
 async function editComment(id){
   const leave = leaves.find(l => l.id === id);
@@ -331,7 +403,21 @@ async function editComment(id){
     return;
   }
 
-  const text = prompt("請輸入主管註解", leave.comment || "");
+  let promptMessage = "請輸入主管註解";
+  let defaultValue = leave.comment || "";
+  
+  // 特別處理忘記打卡
+  if(leave.type === "忘記打卡") {
+    if(leave.approved === 1) {
+      promptMessage = "忘記打卡申請已核准，可補充說明核准原因：";
+      defaultValue = defaultValue || "已確認實際出勤，核准通過。";
+    } else {
+      promptMessage = "忘記打卡申請審核中，請填寫審核意見：";
+      defaultValue = defaultValue || "待確認實際出勤狀況...";
+    }
+  }
+
+  const text = prompt(promptMessage, defaultValue);
   if(text === null) return;
 
   await fetch(API_COMMENT, {
@@ -344,15 +430,108 @@ async function editComment(id){
 }
 
 /* =====================
-   DRAW TABLE
+   顯示忘記打卡清單
+===================== */
+function showForgetPunchList(){
+  const pendingForget = leaves.filter(l => 
+    l.type === "忘記打卡" && 
+    l.withdrawn !== 1 && 
+    l.approved !== 1
+  );
+  
+  if(pendingForget.length === 0){
+    alert("目前沒有待核准的忘記打卡申請");
+    return;
+  }
+  
+  let html = `
+    <p>共有 <strong style="color:#e74c3c">${pendingForget.length}</strong> 筆忘記打卡申請待核准：</p>
+    <table style="width:100%;margin:15px 0;font-size:13px;border:1px solid #ddd;">
+      <tr style="background:#f5f5f5">
+        <th style="padding:8px">申請人</th>
+        <th style="padding:8px">日期</th>
+        <th style="padding:8px">申請內容</th>
+        <th style="padding:8px">動作</th>
+      </tr>`;
+  
+  pendingForget.forEach(leave => {
+    const shortReason = leave.reason ? 
+      (leave.reason.length > 100 ? leave.reason.substring(0, 100) + "..." : leave.reason) 
+      : "無說明";
+    
+    html += `
+      <tr style="border-bottom:1px solid #eee">
+        <td style="padding:8px"><strong>${leave.name}</strong></td>
+        <td style="padding:8px">${leave.start_date}</td>
+        <td style="padding:8px;text-align:left">
+          <div style="max-height:60px;overflow:hidden">${shortReason.replace(/\n/g, "<br>")}</div>
+        </td>
+        <td style="padding:8px">
+          <button class="ghost" onclick="approveForgetDirectly(${leave.id})" style="font-size:12px">核准</button>
+          <button class="caution" onclick="viewLeaveDetail(${leave.id})" style="font-size:12px;margin-left:5px">查看</button>
+        </td>
+      </tr>`;
+  });
+  
+  html += `</table>`;
+  
+  document.getElementById("forgetListContent").innerHTML = html;
+  document.getElementById("forgetListModal").style.display = "flex";
+}
+
+function hideForgetList(){
+  document.getElementById("forgetListModal").style.display = "none";
+}
+
+function approveForgetDirectly(id){
+  hideForgetList();
+  approveLeave(id);
+}
+
+function viewLeaveDetail(id){
+  const leave = leaves.find(l => l.id === id);
+  if(!leave) return;
+  
+  alert(
+    `【忘記打卡申請詳細資訊】\n\n` +
+    `申請人：${leave.name}\n` +
+    `申請日期：${leave.start_date}\n` +
+    `申請類型：${leave.type}\n` +
+    `申請狀態：${leave.approved === 1 ? "已核准" : leave.withdrawn === 1 ? "已撤回" : "審核中"}\n` +
+    `申請時間：${leave.created_at || "未記錄"}\n` +
+    `申請原因：\n${leave.reason || "無"}\n\n` +
+    `主管註解：\n${leave.comment || "無"}`
+  );
+}
+
+/* =====================
+   繪製表格
 ===================== */
 function drawTable(){
   const month = mp.value || "";
   mapQueue = [];
   let mapIdx = 0;
 
-  const shown = new Set();        // 打卡去重
-  const shownLeaveIds = new Set(); // 請假去重
+  const shown = new Set();
+  const shownLeaveIds = new Set();
+
+  // 計算待核准的忘記打卡數量
+  const pendingForgetCount = leaves.filter(l => 
+    l.type === "忘記打卡" && 
+    l.withdrawn !== 1 && 
+    l.approved !== 1
+  ).length;
+  
+  // 顯示或隱藏提醒區塊
+  const alertBox = document.getElementById("forgetPunchAlert");
+  const countSpan = document.getElementById("forgetCount");
+  
+  if(pendingForgetCount > 0){
+    alertBox.style.display = "block";
+    countSpan.textContent = `（目前有 ${pendingForgetCount} 筆待核准）`;
+  } else {
+    alertBox.style.display = "none";
+  }
 
   let html = `
   <tr>
@@ -394,7 +573,6 @@ function drawTable(){
     }
     
     const isHoliday = !!holidayName;
-    const rowCls  = isHoliday ? "holidayRow" : isWeekend ? "weekendRow" : "";
     const textCls = isHoliday ? "holidayText" : isWeekend ? "weekendText" : "";
     const label = isHoliday ? "國定假日" : ("週"+realDay);
 
@@ -403,6 +581,24 @@ function drawTable(){
     shown.add(key);
 
     const leave = leaves.find(l => l.name===r.name && date>=l.start_date && date<=l.end_date);
+    
+    // 決定 row 的 class
+    let rowCls = "";
+    if(isHoliday){
+      rowCls = "holidayRow";
+    } else if(isWeekend){
+      rowCls = "weekendRow";
+    } else if(leave){
+      if(leave.type === "出差"){
+        rowCls = "tripRow";
+      } else if(leave.type === "加班"){
+        rowCls = "otRow";
+      } else if(leave.type === "忘記打卡"){
+        rowCls = "forgetRow";
+      } else {
+        rowCls = "leaveOnly";
+      }
+    }
 
     let dist = "";
     let gpsCell = "";
@@ -421,10 +617,20 @@ function drawTable(){
 
     // 狀態（只有申請才有，但打卡列也把請假狀態帶出）
     let statusText = "";
+    let statusBtn = "";
     if(leave){
-      if(leave.withdrawn === 1) statusText = "已撤回";
-      else if(leave.approved === 1) statusText = "已核准";
-      else statusText = "審核中";
+      if(leave.withdrawn === 1){
+        statusText = "已撤回";
+      } else if(leave.approved === 1){
+        statusText = "✔ 已核准";
+      } else {
+        statusText = "審核中";
+        if(leave.type === "忘記打卡"){
+          statusBtn = `<button class="warning" onclick="approveLeave(${leave.id})" title="特別注意：忘記打卡需要仔細審核">核准忘記打卡</button>`;
+        } else {
+          statusBtn = `<button class="ghost" onclick="approveLeave(${leave.id})">核准</button>`;
+        }
+      }
     }
 
     // 註解欄
@@ -437,7 +643,7 @@ function drawTable(){
           <div class="commentCell">
             <div class="commentBox small">${leave.comment ? leave.comment : ""}</div>
             <button class="commentBtn" onclick="editComment(${leave.id})">
-              ${leave.comment ? "修改" : "填寫"}
+              ${leave.comment ? "修改" : (leave.type === "忘記打卡" ? "審核註解" : "填寫")}
             </button>
           </div>`;
       }
@@ -453,17 +659,15 @@ function drawTable(){
       <td>${r.action==="下班" ? time : ""}</td>
       <td>${gpsCell}</td>
       <td class="${dist!=="" && dist>35 ? "far" : ""}">${dist!=="" ? dist : ""}</td>
-      <td>${leave ? leave.type : ""}</td>
+      <td>
+        ${leave ? leave.type : ""}
+        ${leave && leave.type === "忘記打卡" ? '<span class="forget-badge">需核准</span>' : ''}
+      </td>
       <td>${leave ? (leave.start_date + " ~ " + leave.end_date) : ""}</td>
       <td>${leave ? parseDetail(leave.reason) : ""}</td>
       <td>
-        ${leave ? (
-          leave.withdrawn === 1
-            ? `<span class="withdrawnText">已撤回</span>`
-            : leave.approved === 1
-              ? `✔ 已核准`
-              : `<button class="ghost" onclick="approveLeave(${leave.id})">核准</button>`
-        ) : ""}
+        ${statusText}
+        ${statusBtn}
       </td>
       <td>${commentHtml}</td>
     </tr>`;
@@ -497,12 +701,25 @@ function drawTable(){
         }
         
         const isHoliday = !!holidayName;
-        const baseCls = l.type==="出差" ? "tripRow" : l.type==="加班" ? "otRow" : "leaveOnly";
+        let baseCls = "leaveOnly";
+        if(l.type === "出差") baseCls = "tripRow";
+        else if(l.type === "加班") baseCls = "otRow";
+        else if(l.type === "忘記打卡") baseCls = "forgetRow";
+        
         const rowCls  = isHoliday ? "holidayRow" : isWeekend ? "weekendRow" : baseCls;
         const textCls = isHoliday ? "holidayText" : isWeekend ? "weekendText" : "";
         const label = isHoliday ? "國定假日" : ("週"+realDay);
 
         const statusText = (l.withdrawn===1) ? "已撤回" : (l.approved===1 ? "已核准" : "審核中");
+        
+        let statusBtn = "";
+        if(l.withdrawn !== 1 && l.approved !== 1){
+          if(l.type === "忘記打卡"){
+            statusBtn = `<button class="warning" onclick="approveLeave(${l.id})" title="特別注意：忘記打卡需要仔細審核">核准忘記打卡</button>`;
+          } else {
+            statusBtn = `<button class="ghost" onclick="approveLeave(${l.id})">核准</button>`;
+          }
+        }
 
         const commentHtml = (l.withdrawn===1)
           ? `<span class="withdrawnText">—</span>`
@@ -510,7 +727,7 @@ function drawTable(){
             <div class="commentCell">
               <div class="commentBox small">${l.comment ? l.comment : ""}</div>
               <button class="commentBtn" onclick="editComment(${l.id})">
-                ${l.comment ? "修改" : "填寫"}
+                ${l.comment ? "修改" : (l.type === "忘記打卡" ? "審核註解" : "填寫")}
               </button>
             </div>`;
 
@@ -524,16 +741,15 @@ function drawTable(){
           <td></td>
           <td></td>
           <td></td>
-          <td>${l.type}</td>
+          <td>
+            ${l.type}
+            ${l.type === "忘記打卡" ? '<span class="forget-badge">需核准</span>' : ''}
+          </td>
           <td>${l.start_date} ~ ${l.end_date}</td>
           <td>${parseDetail(l.reason)}</td>
           <td>
-            ${l.withdrawn === 1
-              ? `<span class="withdrawnText">已撤回</span>`
-              : l.approved === 1
-                ? `✔ 已核准`
-                : `<button class="ghost" onclick="approveLeave(${l.id})">核准</button>`
-            }
+            ${statusText}
+            ${statusBtn}
           </td>
           <td>${commentHtml}</td>
         </tr>`;
@@ -555,13 +771,13 @@ function drawTable(){
 }
 
 /* =====================
-   EXCEL EXPORT (FULL) - 修正版（加入日期分組空行）
+   Excel 匯出
 ===================== */
 function exportExcel(){
   const wb = XLSX.utils.book_new();
   const month = document.getElementById("monthPicker").value || "";
 
-  // 重建資料 - 修正欄位順序
+  // 重建資料
   const rowsAll = [];
 
   // 1) 打卡列（含請假狀態/註解）
@@ -597,19 +813,19 @@ function exportExcel(){
       date: date,
       sortTime: r.created_at_tw,
       data: [
-        date,  // A: 日期
-        (w.isHoliday ? "國定假日" : w.label) + (w.holidayName ? "｜"+w.holidayName : ""),  // B: 星期
-        r.name,  // C: 姓名
-        r.action,  // D: 類型
-        r.action==="上班" ? time : "",  // E: 上班時間
-        r.action==="下班" ? time : "",  // F: 下班時間
-        gpsText,  // G: GPS
-        distVal,  // H: 距公司(m)
-        leave ? leave.type : "",  // I: 申請類型
-        leave ? (leave.start_date+" ~ "+leave.end_date) : "",  // J: 期間
-        leave ? String(leave.reason||"").replace(/\n/g," ") : "",  // K: 詳細
-        statusText,  // L: 狀態
-        commentText  // M: 主管註解
+        date,
+        (w.isHoliday ? "國定假日" : w.label) + (w.holidayName ? "｜"+w.holidayName : ""),
+        r.name,
+        r.action,
+        r.action==="上班" ? time : "",
+        r.action==="下班" ? time : "",
+        gpsText,
+        distVal,
+        leave ? leave.type : "",
+        leave ? (leave.start_date+" ~ "+leave.end_date) : "",
+        leave ? String(leave.reason||"").replace(/\n/g," ") : "",
+        statusText,
+        commentText
       ]
     });
   });
@@ -646,21 +862,21 @@ function exportExcel(){
 
         rowsAll.push({
           date: cur,
-          sortTime: cur + "T23:59:59", // 申請放在當天最後
+          sortTime: cur + "T23:59:59",
           data: [
-            cur,  // A: 日期
-            (w.isHoliday ? "國定假日" : w.label) + (w.holidayName ? "｜"+w.holidayName : ""),  // B: 星期
-            l.name,  // C: 姓名
-            "申請",  // D: 類型
-            "",  // E: 上班時間
-            "",  // F: 下班時間
-            "",  // G: GPS
-            "",  // H: 距公司(m)
-            l.type,  // I: 申請類型
-            l.start_date+" ~ "+l.end_date,  // J: 期間
-            String(l.reason||"").replace(/\n/g," "),  // K: 詳細
-            (l.approved===1 ? "已核准" : "審核中"),  // L: 狀態
-            (l.comment || "")  // M: 主管註解
+            cur,
+            (w.isHoliday ? "國定假日" : w.label) + (w.holidayName ? "｜"+w.holidayName : ""),
+            l.name,
+            "申請",
+            "",
+            "",
+            "",
+            "",
+            l.type,
+            l.start_date+" ~ "+l.end_date,
+            String(l.reason||"").replace(/\n/g," "),
+            (l.approved===1 ? "已核准" : "審核中"),
+            (l.comment || "")
           ]
         });
         break;
@@ -681,7 +897,7 @@ function exportExcel(){
     people[name].push(row);
   });
 
-  // 每人 Sheet - 修正欄位順序，加入日期分組空行
+  // 每人 Sheet
   const header = [
     "日期", "星期", "姓名", "類型", 
     "上班", "下班", "GPS", "距公司(m)", 
@@ -691,7 +907,6 @@ function exportExcel(){
   Object.keys(people).forEach(name=>{
     const rowsForPerson = people[name];
     
-    // 按日期分組
     const rowsByDate = {};
     let lastDate = "";
     
@@ -703,16 +918,13 @@ function exportExcel(){
       rowsByDate[date].push(row);
     });
     
-    // 建立帶有空行的資料陣列
     const aoa = [header];
-    const dates = Object.keys(rowsByDate).sort().reverse(); // 日期從新到舊
+    const dates = Object.keys(rowsByDate).sort().reverse();
     
     dates.forEach((date, dateIndex) => {
       const dateRows = rowsByDate[date];
       
-      // 按時間排序：上班在前，下班在後，申請在最後
       dateRows.sort((a, b) => {
-        // 上班優先於下班優先於申請
         const typeOrder = { "上班": 1, "下班": 2, "申請": 3 };
         const aType = a.data[3];
         const bType = b.data[3];
@@ -721,53 +933,46 @@ function exportExcel(){
           return typeOrder[aType] - typeOrder[bType];
         }
         
-        // 同類型按時間排序
         return a.sortTime.localeCompare(b.sortTime);
       });
       
-      // 加入該日期的所有資料
       dateRows.forEach(row => {
         aoa.push(row.data);
       });
       
-      // 如果不是最後一個日期，加入空行
       if (dateIndex < dates.length - 1) {
-        aoa.push(Array(13).fill("")); // 13個欄位的空行
+        aoa.push(Array(13).fill(""));
       }
     });
     
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     
-    // 修正欄寬設定
     ws["!cols"] = [
-      {wch:12},  // A: 日期
-      {wch:18},  // B: 星期
-      {wch:10},  // C: 姓名
-      {wch:8},   // D: 類型（上班/下班/申請）
-      {wch:10},  // E: 上班時間
-      {wch:10},  // F: 下班時間
-      {wch:24},  // G: GPS（加寬顯示座標）
-      {wch:12},  // H: 距公司(m)
-      {wch:10},  // I: 申請類型
-      {wch:22},  // J: 期間
-      {wch:34},  // K: 詳細
-      {wch:10},  // L: 狀態
-      {wch:24}   // M: 主管註解
+      {wch:12},
+      {wch:18},
+      {wch:10},
+      {wch:8},
+      {wch:10},
+      {wch:10},
+      {wch:24},
+      {wch:12},
+      {wch:10},
+      {wch:22},
+      {wch:34},
+      {wch:10},
+      {wch:24}
     ];
     
-    // 設定格式（包含日期分組背景色）
-    let currentRow = 2; // 從第2行開始（第1行是標題）
+    let currentRow = 2;
     
     dates.forEach((date, dateIndex) => {
       const dateRows = rowsByDate[date];
       const dateRowCount = dateRows.length;
       
-      // 為該日期分組設定背景色
       for (let i = 0; i < dateRowCount; i++) {
         const rowNum = currentRow + i;
         const isEvenRow = rowNum % 2 === 0;
         
-        // 設定整行背景色（淺灰色）
         const columns = ["A","B","C","D","E","F","G","H","I","J","K","L","M"];
         columns.forEach(col => {
           const cellRef = col + rowNum;
@@ -778,23 +983,28 @@ function exportExcel(){
           if(!cell.s.fill) cell.s.fill = {};
           if(!cell.s.fill.fgColor) cell.s.fill.fgColor = {};
           
-          // 奇數行淺灰色，偶數行白色
           cell.s.fill.fgColor.rgb = isEvenRow ? "F8F9FA" : "FFFFFF";
         });
         
-        // 日期欄位特殊格式（第一行顯示完整日期，其他行留空）
         const dateCell = ws["A" + rowNum];
         if (dateCell && i > 0) {
-          // 同一日期的後續行，日期欄位留空
           dateCell.v = "";
+        }
+        
+        // 特別標記忘記打卡
+        const typeCell = ws["I" + rowNum];
+        if(typeCell && typeCell.v === "忘記打卡"){
+          if(!typeCell.s) typeCell.s = {};
+          if(!typeCell.s.font) typeCell.s.font = {};
+          typeCell.s.font.color = { rgb: "E74C3C" };
+          typeCell.s.font.bold = true;
         }
       }
       
       currentRow += dateRowCount;
       
-      // 如果不是最後一個日期，跳過空行
       if (dateIndex < dates.length - 1) {
-        currentRow += 1; // 空行
+        currentRow += 1;
       }
     });
     
@@ -807,7 +1017,6 @@ function exportExcel(){
       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
       const holiday = HOLIDAY_RANGES.some(h => dateStr >= h.start && dateStr <= h.end);
       
-      // 特殊日期的顏色（覆蓋分組顏色）
       if(holiday || isWeekend){
         const columns = ["A","B","C","D","E","F","G","H","I","J","K","L","M"];
         columns.forEach(col => {
@@ -820,38 +1029,36 @@ function exportExcel(){
           if(!cell.s.fill.fgColor) cell.s.fill.fgColor = {};
           
           if(holiday){
-            cell.s.fill.fgColor.rgb = "FFF4CC"; // 國定假日黃色
+            cell.s.fill.fgColor.rgb = "FFF4CC";
           }else if(isWeekend){
-            cell.s.fill.fgColor.rgb = "FFECEC"; // 週末淺紅色
+            cell.s.fill.fgColor.rgb = "FFECEC";
           }
         });
       }
       
-      // 距離欄位特殊處理 - 只處理H欄
       const distCell = ws["H"+i];
       if(distCell && !isNaN(Number(distCell.v)) && Number(distCell.v) > 35){
         if(!distCell.s) distCell.s = {};
         if(!distCell.s.fill) distCell.s.fill = {};
         if(!distCell.s.fill.fgColor) distCell.s.fill.fgColor = {};
-        distCell.s.fill.fgColor.rgb = "C0392B"; // 紅色
+        distCell.s.fill.fgColor.rgb = "C0392B";
         
         if(!distCell.s.font) distCell.s.font = {};
-        distCell.s.font.color = { rgb: "FFFFFF" }; // 白色字
+        distCell.s.font.color = { rgb: "FFFFFF" };
         distCell.s.font.bold = true;
       }
       
-      // 申請類型的特殊處理（補修、特休等）
       const leaveTypeCell = ws["I"+i];
       if(leaveTypeCell && leaveTypeCell.v){
         const type = String(leaveTypeCell.v);
         if(type === "出差"){
           leaveTypeCell.s = leaveTypeCell.s || {};
           leaveTypeCell.s.font = leaveTypeCell.s.font || {};
-          leaveTypeCell.s.font.color = { rgb: "27AE60" }; // 綠色
+          leaveTypeCell.s.font.color = { rgb: "27AE60" };
         }else if(type === "加班"){
           leaveTypeCell.s = leaveTypeCell.s || {};
           leaveTypeCell.s.font = leaveTypeCell.s.font || {};
-          leaveTypeCell.s.font.color = { rgb: "2980B9" }; // 藍色
+          leaveTypeCell.s.font.color = { rgb: "2980B9" };
         }
       }
     }
@@ -859,7 +1066,7 @@ function exportExcel(){
     XLSX.utils.book_append_sheet(wb, ws, name.substring(0,31));
   });
 
-  // Daily Summary（也加入日期分組）
+  // Daily Summary
   const summary = {};
   rowsAll.forEach(row=>{
     const r = row.data;
@@ -882,11 +1089,9 @@ function exportExcel(){
     summary[key].maxDist = Math.max(summary[key].maxDist, dist);
   });
 
-  // 將 summary 轉為陣列並按日期分組
   const summaryArray = Object.values(summary);
   summaryArray.sort((a, b) => b.date.localeCompare(a.date));
   
-  // 按日期分組
   const summaryByDate = {};
   summaryArray.forEach(item => {
     const date = item.date;
@@ -902,23 +1107,20 @@ function exportExcel(){
   dates.forEach((date, dateIndex) => {
     const dateSummaries = summaryByDate[date];
     
-    // 按姓名排序
     dateSummaries.sort((a, b) => a.name.localeCompare(b.name));
     
     dateSummaries.forEach(item => {
       sumAoa.push([item.date, item.name, item.earliest, item.latest, item.maxDist]);
     });
     
-    // 如果不是最後一個日期，加入空行
     if (dateIndex < dates.length - 1) {
-      sumAoa.push(Array(5).fill("")); // 5個欄位的空行
+      sumAoa.push(Array(5).fill(""));
     }
   });
 
   const wsSum = XLSX.utils.aoa_to_sheet(sumAoa);
   wsSum["!cols"] = [{wch:12},{wch:10},{wch:10},{wch:10},{wch:14}];
   
-  // 設定日期分組顏色
   let currentRow = 2;
   dates.forEach((date, dateIndex) => {
     const dateSummaries = summaryByDate[date];
@@ -928,7 +1130,6 @@ function exportExcel(){
       const rowNum = currentRow + i;
       const isEvenRow = rowNum % 2 === 0;
       
-      // 設定整行背景色
       const columns = ["A","B","C","D","E"];
       columns.forEach(col => {
         const cellRef = col + rowNum;
@@ -942,7 +1143,6 @@ function exportExcel(){
         cell.s.fill.fgColor.rgb = isEvenRow ? "F8F9FA" : "FFFFFF";
       });
       
-      // 同一日期的後續行，日期欄位留空
       if (i > 0) {
         const dateCell = wsSum["A" + rowNum];
         if (dateCell) {
@@ -953,13 +1153,11 @@ function exportExcel(){
     
     currentRow += dateRowCount;
     
-    // 如果不是最後一個日期，跳過空行
     if (dateIndex < dates.length - 1) {
       currentRow += 1;
     }
   });
   
-  // Summary的距離超過35m標記
   for(let i = 2; i <= sumAoa.length; i++){
     const distCell = wsSum["E"+i];
     if(distCell && !isNaN(Number(distCell.v)) && Number(distCell.v) > 35){

@@ -35,6 +35,28 @@ hr{margin:12px 0}
 .pending{background:#fff3cd}
 .approved{background:#d4edda}
 .withdrawn{background:#e0e0e0}
+.rejected{background:#f8d7da;color:#721c24}
+
+/* 忘記打卡特別樣式 */
+.forget-notice {
+  background: #ffebee;
+  border-left: 4px solid #e74c3c;
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.forget-notice strong {
+  color: #e74c3c;
+}
+.forget-badge {
+  background: #e74c3c;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  margin-left: 5px;
+}
 </style>
 </head>
 
@@ -44,6 +66,17 @@ hr{margin:12px 0}
   <h3>請假 / 加班 / 出差 / 會議 / 補修</h3>
 
   <button class="secondary" onclick="goHome()">← 回打卡首頁</button>
+
+  <!-- 忘記打卡特別提醒 -->
+  <div id="forgetPunchNotice" class="forget-notice" style="display:none;">
+    <strong>⚠️ 重要提醒：忘記打卡申請需要主管親自核准！</strong><br>
+    請詳細填寫：<br>
+    1. 忘記打卡的確切時間<br>
+    2. 忘記打卡的詳細原因<br>
+    3. 實際工作的起訖時間<br>
+    4. 當日工作內容概述<br>
+    5. 證明人（如有）
+  </div>
 
   <input id="name" placeholder="姓名">
 
@@ -110,13 +143,27 @@ function getStatus(l){
 function onTypeChange(){
   const type = qs("type").value;
   const today = new Date().toISOString().slice(0,10);
+  const notice = qs("forgetPunchNotice");
+
+  // 顯示/隱藏忘記打卡特別提醒
+  if(type === "忘記打卡") {
+    notice.style.display = "block";
+  } else {
+    notice.style.display = "none";
+  }
 
   if(type === "忘記打卡"){
     qs("sd").value = today;
     qs("ed").value = today;
     qs("st").value = "09:00";
     qs("et").value = "18:00";
-    qs("reason").value = "";
+    qs("reason").value = "【忘記打卡詳細說明】\n\n" +
+      "1. 忘記打卡的時間：\n" +
+      "2. 忘記打卡的原因：\n" +
+      "3. 實際工作時段（起訖時間）：\n" +
+      "4. 當日工作內容概述：\n" +
+      "5. 證明人/佐證資料：\n" +
+      "6. 其他補充說明：";
   }
 
   if(type === "補修"){
@@ -124,7 +171,7 @@ function onTypeChange(){
     qs("ed").value = today;
     qs("st").value = "09:00";
     qs("et").value = "18:00";
-    qs("reason").value = "補修原因：";
+    qs("reason").value = "補修原因：\n原加班日期：\n原加班事由：\n補修時段說明：";
   }
 
   if(type === "會議"){
@@ -132,7 +179,7 @@ function onTypeChange(){
     qs("ed").value = today;
     qs("st").value = "09:00";
     qs("et").value = "18:00";
-    qs("reason").value = "會議主題／地點／與會人員：";
+    qs("reason").value = "會議主題／地點／與會人員：\n會議議程：\n預期成果：";
   }
 }
 
@@ -157,15 +204,24 @@ async function loadList(){
   mine.sort((a,b)=>b.id-a.id).forEach(l=>{
     const status = getStatus(l);
     const text = {pending:"審核中",approved:"已核准",withdrawn:"已撤回"}[status];
+    
+    // 檢查是否有主管註解
+    const hasComment = l.comment && l.comment.trim().length > 0;
 
     box.innerHTML += `
       <div class="item">
         <div>
           <span class="badge ${status}">${text}</span>
           <b>${l.type}</b>
+          ${l.type === "忘記打卡" && status === "pending" 
+            ? '<span class="forget-badge">需主管核准</span>' 
+            : ''}
         </div>
         <div class="small">${l.start_date} ~ ${l.end_date}</div>
         <div class="small">${esc(l.reason)}</div>
+        ${hasComment ? `<div class="small" style="background:#f8f9fa;padding:4px;margin-top:4px;border-radius:3px;">
+          <strong>主管註解：</strong>${esc(l.comment)}
+        </div>` : ''}
         ${status==="pending"
           ? `<button class="danger" onclick="withdraw(${l.id})">撤回</button>`
           : ``}
@@ -174,7 +230,7 @@ async function loadList(){
 }
 
 /* =====================
-   Submit
+   Submit - 強化忘記打卡驗證
 ===================== */
 async function submit(){
   const name = qs("name").value.trim();
@@ -187,6 +243,37 @@ async function submit(){
 
   if(!name||!type||!sd||!st||!ed||!et||!reason){
     alert("請填寫完整資料"); return;
+  }
+
+  // 特別針對「忘記打卡」的強化驗證
+  if(type === "忘記打卡") {
+    // 檢查說明是否詳細（至少100字）
+    const wordCount = reason.replace(/\s/g, '').length;
+    if(wordCount < 100) {
+      alert(`忘記打卡申請需要詳細說明原因（至少100字）\n\n目前字數：${wordCount}字\n\n請詳細填寫：\n1. 忘記打卡的確切時間\n2. 忘記打卡的詳細原因\n3. 實際工作的起訖時間\n4. 當日工作內容概述\n5. 證明人（如有）`);
+      return;
+    }
+    
+    // 檢查是否包含必要欄位
+    const requiredFields = [
+      "忘記打卡的時間：",
+      "忘記打卡的原因：", 
+      "實際工作時段（起訖時間）：",
+      "當日工作內容概述："
+    ];
+    
+    const missingFields = requiredFields.filter(field => !reason.includes(field));
+    if(missingFields.length > 0) {
+      alert(`忘記打卡申請缺少必要資訊：\n\n${missingFields.join('\n')}\n\n請按照範本格式完整填寫。`);
+      return;
+    }
+    
+    // 雙重確認提醒
+    const confirmMsg = `⚠️【重要提醒】\n\n忘記打卡申請需要主管親自核准，審核時間約需1-3個工作天。\n\n請確認您已填寫：\n✅ 忘記打卡的確切時間\n✅ 忘記打卡的詳細原因\n✅ 實際工作的起訖時間\n✅ 當日工作內容概述\n\n確定要送出申請嗎？`;
+    
+    if(!confirm(confirmMsg)) {
+      return;
+    }
   }
 
   const detail =
@@ -207,7 +294,7 @@ ${reason}`;
     })
   });
 
-  alert("申請已送出");
+  alert("申請已送出" + (type === "忘記打卡" ? "\n\n請注意：此申請需要主管親自核准，請耐心等待審核結果（約1-3個工作天）。" : ""));
   loadList();
 }
 
@@ -215,7 +302,7 @@ ${reason}`;
    Withdraw
 ===================== */
 async function withdraw(id){
-  if(!confirm("確定要撤回此申請？")) return;
+  if(!confirm("確定要撤回此申請？撤回後將無法恢復。")) return;
 
   await fetch(API_WITHDRAW,{
     method:"POST",
@@ -230,6 +317,28 @@ async function withdraw(id){
    Auto reload
 ===================== */
 qs("name").addEventListener("change", loadList);
+
+/* =====================
+   初始化設定
+===================== */
+document.addEventListener('DOMContentLoaded', function() {
+  // 設定預設日期為今天
+  const today = new Date().toISOString().slice(0,10);
+  qs("sd").value = today;
+  qs("ed").value = today;
+  
+  // 設定日期限制（不能選擇過去的日期）
+  qs("sd").min = today;
+  qs("ed").min = today;
+  
+  // 如果姓名已存在於 URL 參數，自動載入
+  const urlParams = new URLSearchParams(window.location.search);
+  const nameFromUrl = urlParams.get('name');
+  if(nameFromUrl){
+    qs('name').value = nameFromUrl;
+    setTimeout(loadList, 500);
+  }
+});
 </script>
 
 </body>
