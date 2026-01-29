@@ -201,6 +201,15 @@ button:disabled{opacity:.4;cursor:not-allowed}
   border-left:4px solid #f59e0b;
   font-size: 12px;
 }
+.reminder-no-punch-needed {
+  background:#f0fdf4;
+  color:#166534;
+  padding:8px 12px;
+  border-radius:8px;
+  margin:8px 0;
+  border-left:4px solid #10b981;
+  font-weight: 600;
+}
 
 /* 會議詳細資訊 */
 .meeting-details {
@@ -748,8 +757,8 @@ function formatDistance(distance) {
   }
 }
 
-/* ===== 取得出差/會議資訊 ===== */
-async function getBusinessInfo() {
+/* ===== 取得請假/出差/會議資訊 ===== */
+async function getLeaveInfo() {
   try {
     const response = await fetch(API_LEAVE);
     if (!response.ok) {
@@ -768,38 +777,50 @@ async function getBusinessInfo() {
     taiwanTomorrow.setDate(taiwanTomorrow.getDate() + 1);
     const tomorrowStr = formatTaiwanDate(taiwanTomorrow);
     
+    let todayLeave = null;
     let todayBiz = null;
     let yesterdayBiz = null;
     let tomorrowBiz = null;
     
-    const userBiz = list.filter(item => 
+    const userItems = list.filter(item => 
       item.name === name && 
       item.approved === 1 && 
-      (item.type === "出差" || item.type === "會議")
+      item.withdrawn !== 1
     );
     
-    userBiz.forEach(item => {
+    userItems.forEach(item => {
       const startDate = item.start_date;
       const endDate = item.end_date;
       
+      // 檢查今天
       if (taiwanDateStr >= startDate && taiwanDateStr <= endDate) {
-        todayBiz = item;
+        if (item.type === "出差" || item.type === "會議") {
+          todayBiz = item;
+        } else if (["婚假","喪假","育兒假","生產假","病假","特休","補修"].includes(item.type)) {
+          todayLeave = item;
+        }
       }
       
+      // 檢查昨天
       if (yesterdayStr >= startDate && yesterdayStr <= endDate) {
-        yesterdayBiz = item;
+        if (item.type === "出差" || item.type === "會議") {
+          yesterdayBiz = item;
+        }
       }
       
+      // 檢查明天
       if (tomorrowStr >= startDate && tomorrowStr <= endDate) {
-        tomorrowBiz = item;
+        if (item.type === "出差" || item.type === "會議") {
+          tomorrowBiz = item;
+        }
       }
     });
     
-    return { todayBiz, yesterdayBiz, tomorrowBiz };
+    return { todayLeave, todayBiz, yesterdayBiz, tomorrowBiz };
   } catch (error) {
-    console.error("取得出差/會議資訊失敗:", error);
-    log(`❌ 取得出差/會議資訊失敗: ${error.message}`);
-    return { todayBiz: null, yesterdayBiz: null, tomorrowBiz: null };
+    console.error("取得請假/出差/會議資訊失敗:", error);
+    log(`❌ 取得請假/出差/會議資訊失敗: ${error.message}`);
+    return { todayLeave: null, todayBiz: null, yesterdayBiz: null, tomorrowBiz: null };
   }
 }
 
@@ -864,6 +885,39 @@ function createBusinessDetailsHTML(biz, isToday = true) {
   }
   
   html += `</div></div>`;
+  
+  return html;
+}
+
+/* ===== 建立請假資訊HTML ===== */
+function createLeaveDetailsHTML(leave) {
+  if (!leave) return '';
+  
+  let leaveEmoji = "📅";
+  if (leave.type === "婚假") leaveEmoji = "💒";
+  else if (leave.type === "喪假") leaveEmoji = "🙏";
+  else if (leave.type === "育兒假") leaveEmoji = "👶";
+  else if (leave.type === "生產假") leaveEmoji = "🤰";
+  else if (leave.type === "病假") leaveEmoji = "🏥";
+  else if (leave.type === "特休") leaveEmoji = "🏝️";
+  else if (leave.type === "補修") leaveEmoji = "🔄";
+  
+  let html = `<div class="reminder-no-punch-needed">
+    <div style="font-weight: bold; margin-bottom: 4px;">
+      ${leaveEmoji} 今日為 <strong>${leave.type}</strong> 期間
+    </div>
+    <div style="font-size: 12px; color: #166534;">
+      期間：${leave.start_date} ～ ${leave.end_date}
+    </div>`;
+  
+  if (leave.reason) {
+    const reasonPreview = leave.reason.length > 80 ? leave.reason.substring(0, 80) + '...' : leave.reason;
+    html += `<div style="font-size: 11px; margin-top: 6px; padding: 4px; background: rgba(255,255,255,0.7); border-radius: 4px;">
+      📝 ${reasonPreview.replace(/\n/g, ' ')}
+    </div>`;
+  }
+  
+  html += `</div>`;
   
   return html;
 }
@@ -1117,7 +1171,7 @@ async function loadStatus() {
       }
     });
 
-    const { todayBiz, yesterdayBiz, tomorrowBiz } = await getBusinessInfo();
+    const { todayLeave, todayBiz, yesterdayBiz, tomorrowBiz } = await getLeaveInfo();
     
     let statusHTML = "";
     
@@ -1144,8 +1198,9 @@ async function loadStatus() {
         <div class="status-item">
           <span class="status-label">今日狀態：</span>
           <span class="status-value">
-            ${todayInCount > 0 && todayOutCount > 0 ? '✅ 已完成打卡' : 
-              todayInCount > 0 ? '🟡 已上班' : '🔴 未上班'}
+            ${todayLeave ? '✅ 請假免打卡' : 
+             todayInCount > 0 && todayOutCount > 0 ? '✅ 已完成打卡' : 
+             todayInCount > 0 ? '🟡 已上班' : '🔴 未上班'}
           </span>
         </div>
       </div>
@@ -1189,15 +1244,18 @@ async function loadStatus() {
       if (todayBiz) {
         statusHTML += createBusinessDetailsHTML(todayBiz, true);
       }
+    } else if (todayLeave) {
+      // 今日為請假期間（特休、病假等）
+      statusHTML += createLeaveDetailsHTML(todayLeave);
+      btnIn.disabled = true;
+      btnOut.disabled = true;
     } else {
       if (todayBiz) {
         statusHTML += createBusinessDetailsHTML(todayBiz, true);
-        btnIn.disabled = todayInCount >= MAX_PUNCH_PER_ACTION || isInCooldown();
-        btnOut.disabled = todayOutCount >= MAX_PUNCH_PER_ACTION || isInCooldown() || todayInCount === 0;
-      } else {
-        btnIn.disabled = todayInCount >= MAX_PUNCH_PER_ACTION || isInCooldown();
-        btnOut.disabled = todayOutCount >= MAX_PUNCH_PER_ACTION || isInCooldown() || todayInCount === 0;
       }
+      // 允許上班沒打卡，下班還是可以打卡
+      btnIn.disabled = todayInCount >= MAX_PUNCH_PER_ACTION || isInCooldown();
+      btnOut.disabled = todayOutCount >= MAX_PUNCH_PER_ACTION || isInCooldown();
     }
     
     if (tomorrowBiz) {
@@ -1218,23 +1276,14 @@ async function loadStatus() {
       </div>`;
     }
     
-    if (isInCooldown() && !holiday && now.getDay() !== 0 && now.getDay() !== 6) {
+    if (isInCooldown() && !holiday && now.getDay() !== 0 && now.getDay() !== 6 && !todayLeave) {
       const remainingSeconds = getCooldownRemaining();
       statusHTML += `<div class="reminder-cooldown">
         ⏳ 打卡冷卻中，請等待 <span class="cooldown-timer">${formatCooldownTime(remainingSeconds)}</span>
       </div>`;
     }
     
-    if (!holiday && now.getDay() !== 0 && now.getDay() !== 6 && !todayBiz) {
-      const hhmm = now.getHours() * 100 + now.getMinutes();
-      if (hhmm >= 910 && todayInCount === 0) {
-        statusHTML += `<div style="color:#dc2626;margin:8px 0;padding:8px;background:#fee2e2;border-radius:6px;">
-          ⚠️ <strong>遲到提醒</strong><br>
-          🔴 目前時間 ${formatTimeOnly(now)}，您尚未打卡上班，請速打卡！
-        </div>`;
-      }
-    }
-    
+    // 移除遲到提醒（因為上班沒打卡也可以下班打卡）
     if (todayRecords.length > 0) {
       statusHTML += `<div class="status-record" style="margin-top:12px;">
         <div class="status-title">📋 今日打卡明細（${todayRecords.length}筆）</div>`;
@@ -1320,10 +1369,11 @@ function punch(action) {
     return;
   }
   
-  if (action === "下班" && todayInCount === 0) {
-    alert("❌ 請先打卡上班後再打卡下班");
-    return;
-  }
+  // 移除原本的限制：下班打卡必須先有上班打卡
+  // if (action === "下班" && todayInCount === 0) {
+  //   alert("❌ 請先打卡上班後再打卡下班");
+  //   return;
+  // }
   
   if (count === 1) {
     if (!confirm(`⚠️ 您今天已經打過一次「${action}」\n是否確定要進行第二次修正打卡？`)) {
